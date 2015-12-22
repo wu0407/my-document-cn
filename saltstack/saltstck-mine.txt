@@ -1,4 +1,4 @@
-SALT MINE
+SALT MINE									版本2015.8.3
 	salt mine用来收集minion的任意数据和把它存储在master里。这个所有minion都可以通过salt.modules.mine模块来获取这些数据
 	mine数据聚集在minion且发送给维护最近数据的master(如果使用长期的数据，需要使用returners和扩展的job缓存)
 	MINE VS GRAINS

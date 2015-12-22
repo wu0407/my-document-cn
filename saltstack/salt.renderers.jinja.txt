@@ -1,4 +1,4 @@
-SALT.RENDERERS.JINJA
+SALT.RENDERERS.JINJA							版本2015.8.3
 	https://docs.saltstack.com/en/latest/ref/renderers/all/salt.renderers.jinja.html
 	使用jinja加载单元，启用非常强大的后台jinja模板
 	JINJA IN STATES
