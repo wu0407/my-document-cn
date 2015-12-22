@@ -1,0 +1,205 @@
+SALT.RENDERERS.JINJA
+	https://docs.saltstack.com/en/latest/ref/renderers/all/salt.renderers.jinja.html
+	使用jinja加载单元，启用非常强大的后台jinja模板
+	JINJA IN STATES
+		在state中简单的使用jinja，是使用控制结构来包装或冗余state元素
+			{% if grains['os'] != 'FreeBSD' %}
+			tcsh:
+				pkg:
+					- installed
+			{% endif %}
+
+			motd:
+			  file.managed:
+				{% if grains['os'] == 'FreeBSD' %}
+				- name: /etc/motd
+				{% elif grains['os'] == 'Debian' %}
+				- name: /etc/motd.tail
+				{% endif %}
+				- source: salt://motd
+		在这个例子中，在第一块是评估minion不是运行在freebsd下，第二块基于grain里的os来改变文件名。
+		使用if-else块能够导致state文件非常冗余。在这种情况下使用pillar，或使用先前定义的变量可能更容易。
+			{% set motd = ['/etc/motd'] %}
+			{% if grains['os'] == 'Debian' %}
+			  {% set motd = ['/etc/motd.tail', '/var/run/motd'] %}
+			{% endif %}
+
+			{% for motdfile in motd %}
+			{{ motdfile }}:
+			  file.managed:
+				- source: salt://motd
+			{% endfor %}
+		在模板中设置变量，for循环会迭代的更新MOTD列表中的文件，且对于每个文件都增加一个state块。
+	INCLUDE AND IMPORT
+		include和import能够被用来共享相同的，可重用的state文件和普通文件。
+			{% from 'lib.sls' import test %}
+		这个例子将会从lib.sls导入一个test模板变量或宏，而不是test的state元素。在这种情况下include文件会再次执行grain检测，
+		或有时需要context，需要传递context到使用include的文件:
+			{% from 'lib.sls' import test with context %}
+	MACROS
+		macros有助于消除冗余代码，从模板块中会切除空白，就像包含的块一样，可能需要模拟一个变量从macro返回。
+			# init.sls
+			{% from 'lib.sls' import pythonpkg with context %}
+
+			python-virtualenv:
+			  pkg.installed:
+				- name: {{ pythonpkg('virtualenv') }}
+
+			python-fabric:
+			  pkg.installed:
+				- name: {{ pythonpkg('fabric') }}
+			
+			# lib.sls
+			{% macro pythonpkg(pkg) -%}
+			  {%- if grains['os'] == 'FreeBSD' -%}
+				py27-{{ pkg }}
+			  {%- elif grains['os'] == 'Debian' -%}
+				python-{{ pkg }}
+			  {%- endif -%}
+			{%- endmacro %}
+		这个将会定义一个macro，这个macro将会返回一个包全名字符串，依赖于包系统名称规则。macro中的空白会被消除，因此macro将会
+		返回一个没有换行的字符串，使用jinja2里的whitespace control.
+	TEMPLATE INHERITANCE
+		模板继承在state文件和文件里很好的工作。这个开始查找路径在state tree的根目录或pillar的根目录。
+		FILTERS
+			saltstack扩展了内建的filters:
+			strftime
+				转换任何相对的时间对象到一个基本的时间字符串。它需要python里的strftime指令。一个详细列表能够发现在python官方文档
+					{% set curtime = None | strftime() %}
+				Fuzzy日期需要python里的timelib模块被安装了。
+					{{ "2002/12/25"|strftime("%y") }}
+					{{ "1040814000"|strftime("%Y-%m-%d") }}
+					{{ datetime|strftime("%u") }}
+					{{ "tomorrow"|strftime }}
+			sequence
+				确保这个解析数据是序列化的。
+			yaml_encode
+				序列化一个单一对象到一个YAML scalar，需要处理特殊字符的转义。
+				这个将会工作于任何scalar YAML数据类型:ints, floats, timestamps, booleans, strings, unicode. 
+				它不会工作于多对象，比如sequences or maps。
+					{%- set bar = 7 %}
+					{%- set baz = none %}
+					{%- set zip = true %}
+					{%- set zap = 'The word of the day is "salty"' %}
+
+					{%- load_yaml as foo %}
+					bar: {{ bar|yaml_encode }}
+					baz: {{ baz|yaml_encode }}
+					baz: {{ zip|yaml_encode }}
+					baz: {{ zap|yaml_encode }}
+					{%- endload %}
+				在上面的这个例子，{{ bar }} and {{ foo.bar }}应该是一样，{{ baz }} and {{ foo.baz }}也应该一样。
+			yaml_dquote
+				序列化一个字符串到一个适合转义的双引号包含的YAML字符串。这个用在当内容中字符串未知和可能包含需要保留的引号或unicode。
+				这个结果字符串将会被双引号包含。
+					{%- set bar = '"The quick brown fox . . ."' %}
+					{%- set baz = 'The word of the day is "salty".' %}
+
+					{%- load_yaml as foo %}
+					bar: {{ bar|yaml_dquote }}
+					baz: {{ baz|yaml_dquote }}
+					{%- endload %}
+				在这个例子中{{ bar }} and {{ foo.bar }}必须一样，且{{ baz }} and {{ foo.baz }}也应该一样。
+				如果变量内容不能确保是一个字符串，则最好使用yaml_encode来处理所有的YAML scalar类型。
+			yaml_squote
+				类似yaml_dquote，但是它是一个单引号包含。注意这个YAML只允许特殊的转义在双引号里，所以yaml_squote不是很有用。
+				(你需要使用yaml_encode or yaml_dquote)
+	JINJA IN FILES
+		在管理文件里能够用相同的方法使用jinja:
+			# redis.sls
+			/etc/redis/redis.conf:
+				file.managed:
+					- source: salt://redis.conf
+					- template: jinja
+					- context:
+						bind: 127.0.0.1
+
+			# lib.sls
+			{% set port = 6379 %}
+
+			# redis.conf
+			{% from 'lib.sls' import port with context %}
+			port {{ port }}
+			bind {{ bind }}
+		这个例子中配置能够从文件和外部的模板文件拉取。
+		注意:
+			macro和变量能够通过模板来共享。它们开头不能是一个或多个下划线，且必须被macro, set, load_yaml, load_json
+			, import_yaml and import_json标签所管理
+	CALLING SALT FUNCTIONS
+		jinja render提供一个简短的，用来查找salt的execution function的字典的语法。
+		New in version 2014.7.0.
+			# The following two function calls are equivalent.
+			{{ salt['cmd.run']('whoami') }}
+			{{ salt.cmd.run('whoami') }}
+	DEBUGGING
+		show_full_context函数能够被用来输出当前jinja里的所有的变量。
+		New in version 2014.7.0.
+			Context is: {{ show_full_context() }}
+
+		salt.renderers.jinja.render(template_file, saltenv='base', sls='', argline='', context=None, tmplpath=None, **kws)
+			render template_file，传递 functions and grains到jinja rendering系统.
+			返回类型: 字符串
+		class salt.utils.jinja.SerializerExtension(environment)
+			操作Yaml and Json
+
+			Format filters
+				允许json或yaml风格的数据结构。比如这个数据集:
+					data = {
+						'foo': True,
+						'bar': 42,
+						'baz': [1, 2, 3],
+						'qux': 2.0
+					}
+				使用在jinja
+					yaml = {{ data|yaml }}
+					json = {{ data|json }}
+					python = {{ data|python }}
+				将会被渲染为:
+					yaml = {bar: 42, baz: [1, 2, 3], foo: true, qux: 2.0}
+					json = {"baz": [1, 2, 3], "foo": true, "bar": 42, "qux": 2.0}
+					python = {'bar': 42, 'baz': [1, 2, 3], 'foo': True, 'qux': 2.0}
+				这个yaml filter带一个自定义的流风格参数，用来控制YAML输出的风格。
+					{{ data|yaml(False) }}
+				将会被渲染为:
+					bar: 42
+					baz:
+					  - 1
+					  - 2
+					  - 3
+					foo: true
+					qux: 2.0
+			Load filters
+				salt增加了import_yaml and import_json标签。它们类似与import标签，除了这个文档是反序列化的。
+				语法是{% load_yaml as [VARIABLE] %}[YOUR DATA]{% endload %}
+					{% load_json as [VARIABLE] %}[YOUR DATA]{% endload %}
+				举例:
+					{% load_yaml as yaml_src %}
+						foo: it works
+					{% endload %}
+					{% load_json as json_src %}
+						{
+							"bar": "for real"
+						}
+					{% endload %}
+					Dude, {{ yaml_src.foo }} {{ json_src.bar }}!
+				将输出为:
+					Dude, it works for real!
+			Import tags
+				外部文件能够被导入并产生一个jinja变量。
+					{% import_yaml "myfile.yml" as myfile %}
+					{% import_json "defaults.json" as defaults %}
+					{% import_text "completeworksofshakespeare.txt" as poems %}
+			Catalog
+				import_* and load_*标签将会自动暴露它们的目标变量，可以用来import。这个特性能够产生数据目录来处理。
+				举例:
+					# doc1.sls
+					{% load_yaml as var1 %}
+						foo: it works
+					{% endload %}
+					{% load_yaml as var2 %}
+						bar: for real
+					{% endload %}
+
+					# doc2.sls
+					{% from "doc1.sls" import var1, var2 as local2 %}
+					{{ var1.foo }} {{ local2.bar }}
