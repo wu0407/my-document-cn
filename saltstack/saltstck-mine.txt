@@ -1,0 +1,91 @@
+SALT MINE
+	salt mine用来收集minion的任意数据和把它存储在master里。这个所有minion都可以通过salt.modules.mine模块来获取这些数据
+	mine数据聚集在minion且发送给维护最近数据的master(如果使用长期的数据，需要使用returners和扩展的job缓存)
+	MINE VS GRAINS
+		mine数据比grain数据设计的更新更及时。grains更新非常有限基本的且非常大的静态数据。mines设计用来替换缓慢的对端发布时调用minion需要从其他minion获取数据，而不是有一个minion获取其他minion的数据，Salt Mine运行在master，每个mine间隔收集所有minions的mine信息，在任何时候结果接近于实时的并很少开销
+	MINE FUNCTIONS
+		启用Salt Mine 
+			在minion配置文件里设置mine_functions或在Minion's Pillar里，mine_functions选项定义什么功能被执行和允许传递的参数，如果没有参数，空列表必须被添加。
+			mine_functions:
+			  test.ping: []
+			  network.ip_addrs:
+				interface: eth0
+				cidr: '10.0.0.0/8'
+	MINE FUNCTIONS ALIASES
+		功能别名能够提供一个友好的名字，用来允许多个调用相同function跟着不同的参数。这是一个不一样的语法来传递位置和key-value参数。不支持混合的位置和key-value参数。
+		mine_functions:
+		  network.ip_addrs: [eth0]
+		  networkplus.internal_ip_addrs: []
+		  internal_ip_addrs:    			#这个是network.ip_addrs别名
+			mine_function: network.ip_addrs
+			cidr: 192.168.0.0/16
+		  ip_list:							#这个是grains.get的别名
+			- mine_function: grains.get
+			- ip_interfaces
+		
+	MINE INTERVAL
+		在minion启动和给定的计划间隔会执行salt mine function。默认间隔为60分钟，能够通过mine_interval选项来调整
+		mine_interval: 60
+	MINE IN SALT-SSH
+		在salt-ssh里minion不能提供自己的mine_functions配置(里面没有salt-minion)，所以查找mine functions通过这三个地方:
+			Roster data
+			Pillar
+			Master config
+		这个mine_functions格式与普通salt里的一样，仅仅保存地方不一样。
+		在roster文件里包含mine_functions
+			test:
+			  host: 104.237.131.248
+			  user: root
+			  mine_functions:
+				cmd.run: ['echo "hello!"']
+				network.ip_addrs:
+				  interface: eth0
+		注意
+			salt-ssh使用不同的架构，调用mine.get有些时候无效。salt必须产生一个新的salt-ssh调用minion，minion来获取请求数据，非常像publish调用。无论如何，不像publish，运行时这个function必须被包装。所以我们能够从minion里的pillar获取function的参数。这个结果是不正常的延迟在获取请求数据。
+	EXAMPLE
+		一种在state里使用Salt Mine数据。这个值可以通过jinja来获取且使用在sls文件中。下面一个例子是部分HAProxy配置文件和拉取所有含有web的grain的minion的ip添加到负载均衡服务器中。
+		
+		/srv/pillar/top.sls:
+
+		base:
+		  'G@roles:web':
+			- web
+
+		/srv/pillar/web.sls:
+
+		mine_functions:
+		  network.ip_addrs: [eth0]
+
+		
+		/etc/salt/minion.d/mine.conf:
+
+		mine_interval: 5
+		/srv/salt/haproxy.sls:
+
+		haproxy_config:
+		  file.managed:
+			- name: /etc/haproxy/config
+			- source: salt://haproxy_config
+			- template: jinja
+
+		/srv/salt/haproxy_config:
+
+		<...file contents snipped...>
+
+		{% for server, addrs in salt['mine.get']('roles:web', 'network.ip_addrs', expr_form='pillar').items() %}
+		server {{ server }} {{ addrs[0] }}:80 check
+		{% endfor %}
+
+		<...file contents snipped...>
+		
+		每5分钟获取grain里roles为web的且在线的minion ip地址(非回环地址)，添加到haproxy里的配置里.(让haproxy检查这个服务器80端口是否正常，正常就添加到负载均衡服务器池中)
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
