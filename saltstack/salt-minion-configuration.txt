@@ -1,0 +1,378 @@
+MINION CONFIGURATION								版本2015.8.3
+	https://docs.saltstack.com/en/latest/ref/configuration/minion.html
+	默认salt minion会去尝试连接dns名字为salt的ip，如果解析成功，则不需要配置任何选项。否则需要指定master的ip
+		master: 10.0.0.1
+	MINION PRIMARY CONFIGURATION
+		MASTER
+			master的ipv4或主机名
+			Default: salt
+			master: salt
+			设置一个列表的master在启用多master模式
+				master:
+				  - address1
+				  - address2
+			master能够被动态配置。master的值可以设置为模块函数，它会执行且假设返回值是ip或主机名。如果指定是一个函数，则必须设置master_type为func，用来告诉minion这个选项值是执行的函数，不是标准的域名
+				master: module.function
+				master_type: func
+			代替使用 multi-master 模式，可以配置一个master地址列表作为故障转移列表，先尝试第一个地址，然后第二个，然后第。。。直到成功连接，启用这个行为，设置master_type为failover
+				master:
+				  - address1
+				  - address2
+				master_type: failover
+		MASTER_TYPE
+			设置master类型，可以设置为str, failover or func.
+			Default: str
+			当设置为failover，master必须设置为一个地址列表。minion会按顺序尝试在列表每个master，直到连接成功。还要设置 master_alive_interval，这个决定多久minion去检测当前的master
+				master_type: failover
+			当master需要动态分配时，需要使用执行函数，设置这个值为func。可以简单改变模块算法来返回一个新的master ip或fqdn，重启minion将会连接到新的master
+				master_type: func
+		MASTER_ALIVE_INTERVAL
+			配置minion多少秒去验证当前的master是否存活和响应。当minion发现当前的master dead时，会去尝试连接列表中的下一个master
+			master_alive_interval: 30
+		MASTER_SHUFFLE
+			如果master是一个地址列表，洗牌这些地址在尝试通过所有可用的master连接到分布的其他minion之前。这个使用的是python的 random.shuffle方法
+			Default: False
+			master_shuffle: True
+		RETRY_DNS
+			设置在尝试解析master主机名失败之前等待多少秒，设置为0则minion必须关闭且不用重试
+			Default: 30
+			retry_dns: 30
+		MASTER_PORT
+			指定master的ret服务端口，需要与master的 ret_port设置一置
+			Default: 4506
+			master_port: 4506
+		USER
+			运行salt进程的用户
+			Default: root
+			user: root
+		SUDO_RUNAS
+			运行salt的用户远程执行命令通过sudo。如果这个选项启用则sudo将会被用来改变有效的用户执行远程命令。启用这个选项，则需要sudoers文件里配置这个选项配置的用户相关选项。(通过sudoer文件里定义的用户来访问)很多普通选项需要使用root用户。如果这个选项设置了，则user选项还应该设置为非root用户。(这段英文有点不好懂，我觉的可能有错，这个选项是新添加的)
+			如果从root用户的minion迁移到非root用户的minion，则minion缓存必须被删除，minion pki目录需要改变为新用户的属组
+			Default: None
+			sudo_runas: root  (官方文档里是 sudo_user: root应该是错误的)，而且在开发版里2015.8.2没有任何有关代码
+		SUDO_USER
+			设置salt通过sudo命令切换的用户，用来执行所有远程模块。salt minion进程还是运行为user选项设置用户，但是所有模块执行将通过sudo
+			Default: ''
+			sudo_user: saltadm
+		PIDFILE
+			salt daemon的守护进程的pid文件
+			Default: /var/run/salt-minion.pid
+			pidfile: /var/run/salt-minion.pid
+		ROOT_DIR
+			根目录
+			Default: /
+			root_dir: /
+		PKI_DIR
+			保存minion公钥和私钥的目录
+			Default: /etc/salt/pki
+			pki_dir: /etc/salt/pki
+		ID
+			minion id
+			Default: the system's hostname
+			id: foo.bar.com
+		APPEND_DOMAIN
+			追加一个域名到主机名，当在event里它不存在。这个在系统里不能通过socket.getfqdn()获取FQDN。比如Solaris
+			Default: None
+			append_domain: foo.org
+		CACHEDIR
+			本地minion的缓存目录，这个目录可能包含敏感信息，需要保护
+			Default: /var/cache/salt
+			cachedir: /var/cache/salt
+		VERIFY_ENV
+			在启动时验证和设置权限在配置目录，当设置为true，则配置文件目录/etc/salt需要能写入。在临时挂载/etc/salt为只读情况下，当state.highstate被调用，则将会创建一个堆跟踪
+			Default: True
+			verify_env: True
+		CACHE_JOBS
+			minion能够本地缓存jobs发送的返回的数据，这设一个很好的方法来跟踪minion的job执行。
+			Default: False
+			cache_jobs: False
+		GRAINS_CACHE
+			minion能够本地缓存grain数据，代替每次grain被引用时刷新，默认这个功能被禁用的
+			Default: False
+			grains_cache: False
+		SOCK_DIR
+			unix锁文件目录
+			Default: /var/run/salt/minion
+			sock_dir: /var/run/salt/minion
+		BACKUP_MODE
+			备份在缓存目录里被file.managed和file.recurse替换的文件
+			Default: []
+			backup_mode: minion
+		ACCEPTANCE_WAIT_TIME
+			多少秒等待直到重新认证master
+			Default: 10
+			acceptance_wait_time: 10
+		RANDOM_REAUTH_DELAY
+			当master的key改变了，minion会去尝试重新认证它自己和接受新的master key。在非常多的minion环境下，这个可能对master造成syn flood，因为所有的minion都立刻重新验证。阻止这个情况，minion随机等待一些时间，然后再验证。使用这个选项来设置，随机等待时间可以是0到设置的值。
+			random_reauth_delay: 60
+		ACCEPTANCE_WAIT_TIME_MAX
+			设置最大等待秒数直到尝试重新认证master，如果设置了这个选项，则等待时间会增加这个值在每个迭代
+			Default: None
+			acceptance_wait_time_max: None
+		RECON_DEFAULT
+			socket在尝试重新连接master时，必须等待毫秒间隔时间
+			Default: 1000
+			recon_default: 1000
+		RECON_MAX
+			socket必须等待的最大时间。每个等待间隔时间是先前时间的两倍。如果时间到达recon_max，则重新从recon_default开始
+			Default: 10000
+			recon_max: 10000
+		RECON_RANDOMIZE
+			在minion启动时产生一个随机等待时间。等待时间将会是一个随机值从 recon_default到recon_max。如果所有minion使用相同的值(recon_default and recon_max )在上千的minion，仍然会造成 master flood。期望的行为是所有minion重连有个时间梯度
+			Default: True
+			recon_randomize: True
+		RETURN_RETRY_TIMER
+			返回尝试的超时时间
+			Default: 5
+			return_retry_timer: 5
+		RETURN_RETRY_TIMER_MAX
+			返回尝试的最大超时时间，如果是非0值，则minion返回重试超时时间，会是一个随机整数，在return_retry_timer and return_retry_timer_max之间
+			Default: 10
+			return_retry_timer_max: 10
+		CACHE_SREQS
+			连接到master ret_port的端口一直打开(keepalive)。当设置为false，每次都会创建一个新的连接到master。环境里这个值为false
+			Default: True
+			cache_sreqs: True
+		IPC_MODE
+			windows平台缺乏POSIX IPC (进程间通信)，且必须依赖更慢的tcp内部进程通信。设置ipc_mode为tcp在相应的系统中
+			Default: ipc
+			ipc_mode: ipc
+		TCP_PUB_PORT
+			当ipc_mode为tcp使用的公共端口
+			Default: 4510
+			tcp_pub_port: 4510
+		TCP_PULL_PORT
+			当ipc_mode为tcp使用的拉取端口
+			Default: 4511
+			tcp_pull_port: 4511
+	MINION MODULE MANAGEMENT
+		DISABLE_MODULES
+			希望禁用的minion模块，sys模块built into minion不能被禁用，这个设置可以降低minion内存使用
+			Default: [] (all modules are enabled by default)
+			disable_modules:
+			  - test
+			  - solr
+		DISABLE_RETURNERS
+			禁用指定returners
+			Default: [] (all returners are enabled by default)
+			disable_returners:
+			  - mongo_return
+		MODULE_DIRS
+			扩展目录列表来搜索salt模块
+			Default: []
+			module_dirs:
+			  - /var/lib/salt/modules
+		RETURNER_DIRS
+			扩展目录列表来搜索salt returners
+			Default: []
+			returners_dirs:
+			  - /var/lib/salt/returners
+		STATES_DIRS
+			扩展目录列表来搜索salt states
+			Default: []
+			states_dirs:
+			  - /var/lib/salt/states
+		GRAINS_DIRS
+			扩展目录列表来搜索salt grains
+			Default: []
+			grains_dirs:
+			  - /var/lib/salt/grains
+		RENDER_DIRS
+			扩展目录列表来搜索salt renderer
+			Default: []
+			render_dirs:
+			  - /var/lib/salt/renderers
+		CYTHON_ENABLE
+			设置这个值为true启用自动加载和编译.pyx模块。这个设置需要gcc和cython安装在minion里
+			Default: False
+			cython_enable: False
+		ENABLE_ZIP_MODULES
+			设置这个值为true启用加载zip归档的扩展模块。这个允许打包模块代码和指定的依赖来避免冲突或安装指定模块的依赖到系统库
+			Default: False
+			enable_zip_modules: False
+		PROVIDERS
+			模块提供者可以是静态的覆盖或扩展providers选项。这个可以设置在sls文件中或全局的minion配置文件
+			Default: (empty)
+			providers:
+			  service: systemd
+	STATE MANAGEMENT SETTINGS
+		RENDERER
+			本地state执行的渲染者
+			Default: yaml_jinja
+			renderer: yaml_jinja
+		STATE_VERBOSE
+			state_verbose允许minion返回的数据更详细。通常只有state执行失败或这state改变的东西才会被返回，但是设置这个选项为true将会返回所有state检查的
+			Default: False
+			state_verbose: True
+		STATE_OUTPUT
+			当设置为full则每个state改变输出是全部多行，如果设置为terse则输出是简短单行
+			Default: full
+			state_output: full
+		AUTOLOAD_DYNAMIC_MODULES
+			设为ture会自动加载在master环境中发现的模块。
+			Default: True
+			autoload_dynamic_modules: True
+		clean_dynamic_modules
+			保持minion的动态模块与master的动态模块同步，如果一个模块在master里被删除，则在minion里它也会被删除
+			Default: True
+			clean_dynamic_modules: True
+		ENVIRONMENT
+			通常minion不隔离任何在master单独的环境当运行state，但是可以通过设置该选项在minion端隔离环境。推荐使用top文件来管理环境，而不是这个选项
+			Default: None
+			environment: None
+
+	FILE DIRECTORY SETTINGS
+		FILE_CLIENT
+			客户端默认查找文件通过master服务，但是能够知己查找文件在minion通过设置该选项为local
+			Default: remote
+			file_client: remote
+		USE_MASTER_WHEN_LOCAL
+			当file_client设置为local，这个选项用来允许客户端连接到master来远程执行
+			Default: False
+			use_master_when_local: False
+		FILE_ROOTS
+			当file_client设置为local，这个选项用来设置文件服务环境。
+			Default:
+			
+				base:
+				  - /srv/salt
+			
+			file_roots:
+			  base:
+				- /srv/salt
+			  dev:
+				- /srv/salt/dev/services
+				- /srv/salt/dev/states
+			  prod:
+				- /srv/salt/prod/services
+				- /srv/salt/prod/states
+		HASH_TYPE
+			当file_client设置为local，使用的hash算法来发现文件，可以设置为md5, but sha1, sha224, sha256, sha384, and sha512 
+			Default: md5
+			hash_type: md5
+		PILLAR_ROOTS
+			当file_client设置为local，这个参数用来设置pillar环境
+			Default:
+
+				base:
+				  - /srv/pillar
+			
+			pillar_roots:
+			  base:
+				- /srv/pillar
+			  dev:
+				- /srv/pillar/dev
+			  prod:
+				- /srv/pillar/prod
+	SECURITY SETTINGS
+		OPEN_MODE
+			这个选项用来清理从master接收的PKI key，设置这个选项为true，重启minion，然后设置这个选项为false，重启minion，则key就会被清除
+			Default: False
+			open_mode: False
+		MASTER_FINGER
+			设置master的公钥的指纹
+			Default: ''
+			master_finger: 'ba:30:65:2a:d6:9e:20:4f:d8:b2:f3:a7:d4:65:11:13'
+		VERIFY_MASTER_PUBKEY_SIGN
+			启用验证master公钥签名在master认证回应里，当这个设置为true，则master配置文件里的master_sign_pubkey必须设置为true
+			Default: False
+			verify_master_pubkey_sign: True
+		MASTER_SIGN_KEY_NAME
+			master公钥文件名没有以.pub后缀名，必须验证签名。这个文件必须位于minion的pki目录
+			Default: master_sign
+			master_sign_key_name: <filename_without_suffix>
+		ALWAYS_VERIFY_SIGNATURE
+			如果verify_master_pubkey_sign启用，如果master的公钥改变，则只验证签名。如果签名一直要验证(任何会话过程)，则设置这个选项为true
+			Default: False
+			always_verify_signature: True
+	THREAD SETTINGS
+		启用多进程支持，默认禁用多进程支持，当minion接收发布新的进程和命令在这个进程里面执行(看不懂)
+		Default: True
+		multiprocessing: True
+	MINION LOGGING SETTINGS
+		LOG_FILE
+			指定日志记录文件，可以是普通文件，本地路径名或本地网络
+			Default: /var/log/salt/minion
+			log_file: /var/log/salt/minion
+			log_file: file:///dev/log
+			log_file: udp://loghost:10514
+		LOG_LEVEL
+			发送到console的信息级别
+			Default: warning
+			log_level: warning
+		LOG_LEVEL_LOGFILE
+			发送到日志文件的信息级别，当它没有明确指定，则会继承log_level设置的级别
+			Default: warning
+			log_level_logfile: warning
+		LOG_DATEFMT
+			发送到console的信息里的时间和日期格式
+			Default: %H:%M:%S
+			log_datefmt: '%H:%M:%S'
+		LOG_DATEFMT_LOGFILE
+			发送到日志文件的信息里的时间和日期格式
+			Default: %Y-%m-%d %H:%M:%S
+			log_datefmt_logfile: '%Y-%m-%d %H:%M:%S'
+		LOG_FMT_CONSOLE
+			发送到console的信息里的格式
+			Default: [%(levelname)-8s] %(message)s
+			log_fmt_console: '%(colorlevel)s %(colormsg)s'
+			log_fmt_console: '[%(levelname)-8s] %(message)s'
+		LOG_FMT_LOGFILE
+			发送到日志文件的信息里的的格式
+			Default: %(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s
+			log_fmt_logfile: '%(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s'
+		LOG_GRANULAR_LEVELS
+			这个用来控制日志级别更特殊
+			Default: {}
+		FAILHARD
+			设置全局的 failhard标签，这个通知所有state停止执行state在一个state执行失败
+			Default: False
+			failhard: False
+	INCLUDE CONFIGURATION
+		DEFAULT_INCLUDE
+			minion配置文件可以包括其他文件。默认每个minion会自动include所有配置文件从minion.d/*.conf，其中 minion.d目录是相对与minion配置文件
+		INCLUDE
+			minion配置文件可以包括其他文件。通过一个路径列表来启用这个选项。这个路径可以是相对或绝对。如果是相对
+			则认为路径相对主minion配置文件所在的目录，路径可以使用shell风格的通配符。如果指定的路径没有文件匹配，则minion会记录一个警告信息
+			Default: not defined
+			# Include files from a minion.d directory in the same
+			# directory as the minion config file
+			include: minion.d/*.conf
+
+			# Include a single extra file into the configuration
+			include: /etc/roles/webserver
+
+			# Include several files and the minion.d directory
+			include:
+			  - extra_config
+			  - minion.d/*
+			  - /etc/roles/webserver
+	FROZEN BUILD UPDATE SETTINGS
+		这个选项控制 salt.modules.saltutil.update()冰盒冻结app如何工作
+		UPDATE_URL
+			设置url用来查找应用升级。Esky依赖与目录列表来搜素新版本。一个web服务器运行在master里对于大多数安装是一个非常好开始。
+			Default: False (Update feature is disabled)
+			update_url: 'http://salt.example.com/minion-updates'
+		UPDATE_RESTART_SERVICES
+			设置一个服务列表用来重启，当 minion软件被更新。这个列表通常包含minion的服务名，但是你也可以添加你想要的其他服务。
+			Default: [] (service restarting on update is disabled)
+			update_restart_services: ['salt-minion']
+	STANDALONE MINION WINDOWS SOFTWARE REPO SETTINGS
+		要使用这些选项，minion必须运行在masterless模式(设置 file_client为local)
+		WINREPO_DIR
+			导出 winrepo_remotes的本地目录
+			Default: C:\salt\srv\salt\win\repo
+			winrepo_dir: 'D:\winrepo'
+		WINREPO_CACHEFILE
+			创建存放winrepo缓存目录，该目录相对于winrepo_dir
+			Default: winrepo.p
+			winrepo_cachefile: winrepo.p
+		WINREPO_REMOTES
+			包含winrepo的git仓库列表
+			Default: ['https://github.com/saltstack/salt-winrepo.git']
+			winrepo_remotes:
+			  - https://github.com/saltstack/salt-winrepo.git
+			指定一个特殊的修订版，在仓库地址前添加提交id
+			winrepo_remotes:
+			  - '<commit_id> https://github.com/saltstack/salt-winrepo.git'
+			替换<commit_id>为提交id的sha1值，指定提交id在最新版本有bug时，回滚到上一个版本很有用。

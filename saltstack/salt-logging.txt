@@ -1,0 +1,56 @@
+LOGGING										版本2015.8.3
+	https://docs.saltstack.com/en/latest/ref/configuration/logging/index.html
+	AVAILABLE CONFIGURATION SETTINGS
+		LOG_FILE
+			日志记录能够发送到一般文件，本地路径名或本地网络。远程记录最好方法是配置使用rsyslogd(file:///dev/log)，让后rsyslog配置为网络日志。远程地址格式为<file|udp|tcp>://<host|socketpath>:<port-if-required>/<log-facility>.
+			Default: 依赖于执行的二进制文件, for example, for salt-master, /var/log/salt/master.
+			Examples:
+
+			log_file: /var/log/salt/master
+			log_file: /var/log/salt/minion
+			log_file: file:///dev/log
+			log_file: udp://loghost:10514
+		LOG_LEVEL
+			发送到console日志信息级别，可以设置为all, garbage, trace, debug, info, warning, error, critical, quiet.
+			Default: warning
+			log_level: warning
+		LOG_LEVEL_LOGFILE
+			发送文件的日志级别，可以设置为all, garbage, trace, debug, info, warning, error, critical, quiet.
+			Default: warning
+			log_level_logfile: warning
+		LOG_DATEFMT
+			发送到console日志的日期时间格式，可以使用的日期时间格式在time.strftime.http://docs.python.org/2/library/time.html#time.strftime
+			Default: %H:%M:%S
+			log_datefmt: '%H:%M:%S'
+		LOG_DATEFMT_LOGFILE
+			发送到文件日志的日期时间格式，可以使用的日期时间格式在time.strftime
+			Default: %Y-%m-%d %H:%M:%S
+			log_datefmt_logfile: '%Y-%m-%d %H:%M:%S'
+		LOG_FMT_CONSOLE
+			发送到console的日志格式，所有基本的python日志的logRecord属性都能使用。http://docs.python.org/2/library/logging.html#logrecord-attributes salt也提供了自定义的logRecord的属性，让console有颜色日志输出
+			'%(colorlevel)s'   # log level name colorized by level
+			'%(colorname)s'    # colorized module name
+			'%(colorprocess)s' # colorized process number
+			'%(colormsg)s'     # log message colorized by level
+			
+			%(colorlevel)s, %(colorname)s, 和 %(colorprocess) 的LogRecord属性，也包含占位符，封闭的中括号，[ 和 ],用来匹配默认附加非颜色 LogRecord属性的值
+			Default: [%(levelname)-8s] %(message)s
+			log_fmt_console: '[%(levelname)-8s] %(message)s'
+		LOG_FMT_LOGFILE
+			记录到文件的日志格式，所有基本的python日志的logRecord属性都能使用。salt也提供了自定义的logRecord的属性包含占位符和中括号
+			'%(bracketlevel)s'   # equivalent to [%(levelname)-8s]
+			'%(bracketname)s'    # equivalent to [%(name)-17s]
+			'%(bracketprocess)s' # equivalent to [%(process)5s]
+			
+			Default: %(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s
+			log_fmt_logfile: '%(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s'
+		LOG_GRANULAR_LEVELS
+			这个用来控制日志级别更特殊。比如设置主salt库在警告级别，salt.modules设置为debug级别
+			Default: {}
+			log_granular_levels:
+			  'salt': 'warning'
+			  'salt.modules': 'debug'
+		EXTERNAL LOGGING HANDLERS
+			logstash_mod	Logstash Logging Handler
+			sentry_mod	Sentry Logging Handler
+			https://docs.saltstack.com/en/latest/ref/configuration/logging/handlers/index.html

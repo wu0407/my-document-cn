@@ -1,0 +1,747 @@
+MASTER CONFIGURATION								版本2015.8.3
+	https://docs.saltstack.com/en/latest/ref/configuration/master.html
+	INTERFACE
+		默认master监听在4505和4506端口在所有接口中,要绑定到特殊的接口
+			interface: 10.0.0.1
+	IPV6
+		默认False
+		指定是否监听ipv6连接，启用的化要调整interface配置，比如"interface: '::'"
+		ipv6: True
+	PUBLISH_PORT
+		设置公共接口的端口号
+		默认为4505
+		publish_port: 4505
+	MASTER_ID
+		用在 MultiSyndics返回job到请求的master，这个id传递公共job到minions，必须与syndic的配置一样的字符串
+		默认None
+		master_id: MasterOfMaster
+	USER
+		运行salt进程的用户
+		默认为root
+		user: root
+	MAX_OPEN_FILES
+		最大打开文件数
+		默认100000
+		max_open_files: 100000
+	WORKER_THREADS
+		多少个进程开始接受minions命令和回应。如果minion卡在回应master，应该增大这个参数
+		默认为5
+		在 peer system(多master)时，Worker threads不能小于3个，其他情况可以设置为1
+		master守护进程启动时，期望行为是查看多个salt-master进程，最少的情况下，控制进程会启动 Publisher，EventPublisher，和一些MWorker进程，MWorker进程数通过'worker_threads'配置值来调整
+		worker_threads: 5
+	RET_PORT
+		这个端口用来接受执行返回和命令执行
+		默认4506
+		ret_port: 4506
+	PIDFILE
+		master pid文件所在的路径
+		默认/var/run/salt-master.pid
+		pidfile: /var/run/salt-master.pid
+	ROOT_DIR
+		默认为 /
+		系统操作的根目录，这个目录是这些目录的前缀， pki_dir, cachedir, sock_dir, log_file, autosign_file, autoreject_file, pidfile.
+		root_dir: /
+	PKI_DIR
+		存储pki认证key的目录
+		默认/etc/salt/pki
+		pki_dir: /etc/salt/pki
+	EXTENSION_MODULES
+		自定义模块目录，这个目录包含各个类型的子目录，类型有"runners", "output", "wheel", "modules", "states", "returners"，这些目录相对于root_dir
+		extension_modules: srv/modules
+	MODULE_DIRS
+		扩展目录搜索salt模块
+		默认[]
+		module_dirs:
+		  - /var/cache/salt/minion/extmods
+	CACHEDIR
+		存储缓存信息的目录，这个目录可能包含敏感信息，需要被保护
+		默认/var/cache/salt
+		cachedir: /var/cache/salt
+	VERIFY_ENV
+		在启动时在配置目录设置检查和设置权限
+		默认True
+		verify_env: True
+	KEEP_JOBS
+		保留老的job信息多少个小时
+		默认24
+	TIMEOUT
+		设置默认的命令和api超时时间
+		默认为5
+	LOOP_INTERVAL
+		设置master维护进程执行检查循环间隔秒，这个进程更新后端文件服务，清理job缓存和执行调度
+		默认60
+	OUTPUT
+		设置默认的salt命令输出器
+		默认为nested
+	COLOR
+		默认的输出有颜色
+		默认为True
+		color: False
+	SOCK_DIR
+		主进程的锁文件路径
+		默认/var/run/salt/master
+		sock_dir: /var/run/salt/master
+	ENABLE_GPU_GRAINS
+		启用收集gpu硬件数据
+		默认为True
+	JOB_CACHE
+		是否开启job缓存
+		默认True
+	MINION_DATA_CACHE
+		是否缓存minion信息在master里，信息包括pillar和grains，目录是按照minion名字创建
+		默认为True
+		minion_data_cache: True
+	EXT_JOB_CACHE
+		指定所有的minion默认的returner，这个配置会禁用本地job缓存，minion返回数据不会通过master，直接到指定的returner
+		Default: ''
+		ext_job_cache: redis
+	EVENT_RETURN
+		指定记录事件的returner，不是所有的returner支持事件返回。在配置这个选项之前确认你要指定的returner包含event_return()函数
+		Default: ''
+		event_return: cassandra_cql
+	MASTER_JOB_CACHE
+		指定job缓存的returner，job缓存只作用于master，不需要被minion访问，minion返回数据通过master，然后再保存在指定的returner
+		Default: 'local_cache'
+		master_job_cache: redis
+	ENFORCE_MINE_CACHE
+		当禁用minion_data_cache，mine将会停止工作，由于它是基于缓存的数据，启用这个选项，会明确仅启用mine system(矿井系统)缓存
+		Default: False
+		enforce_mine_cache: False
+	MAX_MINIONS
+		最大minion连接数允许连接到master，0代表无限制
+		Default: 0
+		max_minions: 100
+	CON_CACHE
+		max_minions用在大量的执行安装，master可能高负载因为检查认证每个minion连接。该缓存提供所有连接minion的id到所有MWorker-processes，提高了性能
+		Default: False
+		con_cache: True
+	PRESENCE_EVENTS
+		master周期性的查看已连接的minion，Presence events are fired on the event bus on a regular interval with a list of connected minions, as well as events with lists of newly connected or disconnected minions。新连接和断开连接的minion列表
+		Default: False
+		presence_events: False
+	SALT-SSH CONFIGURATION
+		ROSTER_FILE
+			salt-ssh花名册路径
+			Default: '/etc/salt/roster'
+			roster_file: /root/roster
+		SSH_MINION_OPTS
+			传递选项覆盖插入到salt-ssh调用的SHIM
+			Default: None
+			minion_opts:
+			  gpg_keydir: /root/gpg
+	MASTER SECURITY SETTINGS
+		OPEN_MODE
+			Open mode关闭认证和告诉master接受所有认证，而且会清除已经接收的minion key，这个模式只是用来短暂的清理pki key
+			Default: False
+			open_mode: False
+		AUTO_ACCEPT
+			自动接收从minion发来的public key
+			Default: False
+			auto_accept: False
+		AUTOSIGN_TIMEOUT
+			多少分钟内接收的public key被接受(生存周期)，且匹配pki_dir/minion_autosign/keyid里的minion名字。当master检查 minion_autosign目录会删除过期的autosign keys(自动标记key)。这个方法比autosign_file更安全，因为keyid记录会过期而且还要精确匹配name
+			Default: 120
+		AUTOSIGN_FILE
+			该选项指定目录，特殊进入的key在autosign_file中将会自动被接受。匹配是首先通过字符串比较，然后通配符，最后全部字符串的正则表达式匹配。
+			Default: not defined
+		AUTOREJECT_FILE
+			跟AUTOSIGN_FILE类似，不过是拒绝接受文件包含的id，将会覆盖 autosign_file and the auto_accept setting.
+			Default: not defined
+		CLIENT_ACL
+			启用限制master执行相应模块针对指定用户，模块名可以是正则表达式
+			Default: {}
+			client_acl:
+			  fred:
+				- test.ping
+				- pkg.*
+		CLIENT_ACL_BLACKLIST
+			用户或模块黑名单
+			Default: {}
+			
+			client_acl_blacklist: #用户执行任何模块
+			  users:
+				- root
+				- '^(?!sudo_).*$'   #  all non sudo users
+			  modules:    #任何用户执行cmd
+				- cmd
+		EXTERNAL_AUTH
+			使用salt认证模块扩展了认证系统，用来认证和验证用户在访问salt系统区域
+			Default: {}
+			external_auth:
+			  pam:
+				fred:
+				  - test.*
+		TOKEN_EXPIRE
+			新生成的口令多少秒存活
+			Default: 43200
+			token_expire: 43200
+		FILE_RECV
+			允许minion推送文件给master
+			Default: False
+			file_recv: False
+		MASTER_SIGN_PUBKEY
+			使用master的公钥对认证回复进行加密签名
+			Default: False
+			master_sign_pubkey: True
+		MASTER_SIGN_KEY_NAME
+			自定义签名key对的名字，没有后缀名
+			Default: master_sign
+			master_sign_key_name: <filename_without_suffix>
+		MASTER_PUBKEY_SIGNATURE
+			在master pki-directory目录里预计算签名的 masters public-key文件名
+			Default: master_pubkey_signature
+			master_pubkey_signature: <filename>
+		MASTER_USE_PUBKEY_SIGNATURE
+			使用预计算签名(公钥)代替每个认证回复都要计算签名， master_pubkey_signature也需要设置
+			Default: False
+			master_use_pubkey_signature: True
+		ROTATE_AES_KEY
+			轮换salt-masters AES-key当一个 minion-public key被salt-key命令删除，禁用这个选项会导致被删除的minion还会监听在信息推送通道上，不要禁用该选项除非知道自己再干啥
+			Default: True
+			rotate_aes_key: True
+	MASTER MODULE MANAGEMENT
+		RUNNER_DIRS
+			设置扩展目录用来搜索runner模块
+			Default: []
+		CYTHON_ENABLE
+			启用Cython模块
+			Default: False
+			cython_enable: False
+	MASTER STATE SYSTEM SETTINGS
+		STATE_TOP
+			知道默认top文件名字
+			Default: top.sls
+			state_top: top.sls
+		MASTER_TOPS
+			Default: {}
+			该选项替换external_nodes选项，创建一个可插拔的系统来产生扩展top数据。external_nodes选项是不推荐。兼容经典的 external_nodes 系统使用以下配置
+				master_tops:
+				  ext_nodes: <Shell command which returns yaml>
+			
+		EXTERNAL_NODES
+			该选项允许salt叠加数据，这些数据通常会被替换在top文件里，并扩展节点控制器。external_nodes选项指定的是可执行，它会返回ENC数据。salt会查找扩展external nodes和top文件，然后混合结果当topfile和external node两个都启用并可用
+			Default: None
+			external_nodes: cobbler-ext-nodes
+		RENDERER
+			指定默认的渲染器
+			Default: yaml_jinja
+			renderer: yaml_jinja
+		FAILHARD
+			设置全局failhard标签，这个通知所有state停止运行state当一个state失败
+			Default: False
+			failhard: False
+		STATE_VERBOSE
+			设置state运行时是否详细输出，设置为false，salt仅显示state执行失败和执行成功时没有任何改变
+			Default: True
+			state_verbose: False
+		STATE_OUTPUT
+			如果设置为full，每个改变会有多行输出
+			设置为terse，输出缩短为单行
+			设置为mixed，一般输出为terse，失败时输出为full
+			设置为changes，一般输出为full，除了没有发生变化
+			Default: full
+			state_output: full
+		STATE_AGGREGATE
+			自动聚合所有state，当state开启mod_aggregate设置为true，或传递一个state模块名列表，用来自动聚合这些配置的类型
+			Default: False
+			state_aggregate:  #只聚合pkg开头
+			  - pkg
+			  
+			state_aggregate: True #聚合所有state
+		STATE_EVENTS
+			设置为ture时，完成每个函数在state都会发送progress events。Progress events 格式为salt/job/<JID>/prog/<MID>/<RUN NUM>.
+			Default: False
+			state_events: True
+		YAML_UTF8
+			启用扩展的YAML，用来渲染state里包含UTF字符
+			Default: False
+			yaml_utf8: False
+		TEST
+			设置所有的state调用都是测试，不做任何改变。为了显示真实的改变或者提示改变了什么
+			Default: False
+			test: False
+	MASTER FILE SERVER SETTINGS
+		FILESERVER_BACKEND
+			设置salt文件服务后端系统类型，默认为roots，配置roots使用file_roots选项
+			Default: ['roots']
+			
+			fileserver_backend:
+			  - roots
+			  - git
+		HASH_TYPE
+			指定文件的hash类型，用来发现文件，支持 md5, but sha1, sha224, sha256, sha384, and sha512
+			Default: md5
+			hash_type: md5
+		FILE_BUFFER_SIZE
+			文件服务的buffer大小
+			Default: 1048576
+			file_buffer_size: 1048576
+		FILE_IGNORE_REGEX
+			忽略传到minion的文件匹配的正则表达式
+			Default: ''
+			file_ignore_regex:
+			  - '/\.svn($|/)'
+			  - '/\.git($|/)'
+		FILE_IGNORE_GLOB
+			忽略传到minion的文件匹配的通配符
+			Default ''
+			file_ignore_glob:
+			  - '\*.pyc'
+			  - '\*/somefolder/\*.bak'
+			  - '\*.swp'
+		ROOTS: MASTER'S LOCAL FILE SERVER
+			FILE_ROOTS
+				指定每个环境的文件根目录，每个环境可以有多个根目录，在根目录下的子目录是不会被匹配
+			Default:
+			
+			base:
+			  - /srv/salt
+			
+			file_roots:
+			  base:
+				- /srv/salt
+			  dev:
+				- /srv/salt/dev/services
+				- /srv/salt/dev/states
+			  prod:
+				- /srv/salt/prod/services
+				- /srv/salt/prod/states
+		GIT: GIT REMOTE FILE SERVER BACKEND
+			GITFS_REMOTES
+				当使用git作为文件服务后端，至少要定义一个远程的git，运行master的用户要能够访问这个repo，分支和tag会转换成salt环境变量
+				Default: []
+				gitfs_remotes:
+				  - git://github.com/saltstack/salt-states.git
+				  - file:///var/git/saltmaster
+				file:// repos会被当做远程和被复制到本地gitfs cache，只有这些repo的本地缓存才会暴露为文件服务的环境变量
+			GITFS_PROVIDER
+				指定提供gitfs的提供者，可以是pygit2, gitpython, or dulwich，如果未设置这些都会按照相同的顺序来尝试，第一个兼容的版本的提供者将会被使用
+				gitfs_provider: dulwich
+			GITFS_SSL_VERIFY
+				连接到远程仓库是否忽略ssl验证失败错误,你可以设置为false，当你的git仓库使用自签名证书。这个选项设为true是不安全的，你可以使用ssh来更好的加密
+				Default: True
+				gitfs_ssl_verify: True
+			GITFS_MOUNTPOINT
+				指定salt文件服务的路径，用来远程访问，能跟gitfs_root一起使用，也能配置为对端远程基础
+				Default: ''
+				gitfs_mountpoint: salt://foo/bar
+				salt://可以省略
+			GITFS_ROOT
+				服务的文件在仓库的子目录里，设置这个选项来代替根目录。这个用在仓库文件在salt文件服务里不可用，可以跟gitfs_mountpoint一起用，可以指定为远程对端的基础
+				Default: ''
+				gitfs_root: somefolder/otherfolder
+			GITFS_BASE
+				定义那个分支或标签必须使用在base环境下，可以指定为远程对端的基础
+				Default: master
+				gitfs_base: salt
+			GITFS_ENV_WHITELIST
+				严格限制某个环境下可用gitfs，能够加速state运行当仓库里包含许多分支或tag
+				Default: []
+				gitfs_env_whitelist:
+				  - base
+				  - v1.*
+				  - 'mybranch\d+'
+			GITFS_ENV_BLACKLIST
+				严格限制某个环境下不可用gitfs，能够加速state运行当仓库里包含许多分支或tag
+				Default: []
+				gitfs_env_blacklist:
+				  - base
+				  - v1.*
+				  - 'mybranch\d+'
+		GITFS AUTHENTICATION OPTIONS
+			这些参数只应用在pygit2 gitfs提供者
+			GITFS_USER
+				指定远程使用HTTPS认证的用户名
+				Default: ''
+				gitfs_user: git
+			GITFS_PASSWORD
+				指定远程使用HTTPS认证的密码，这个参数在仓库没有使用认证时是不需要的
+				Default: ''
+				gitfs_password: mypassword
+			GITFS_INSECURE_AUTH
+				是否启用http认证
+				Default: False
+				gitfs_insecure_auth: True
+			GITFS_PUBKEY
+				用来指定认证ssh的公钥，这个选项需要远程使用ssh
+				Default: ''
+				gitfs_pubkey: /path/to/key.pub
+			GITFS_PRIVKEY
+				用来指定认证ssh的私钥，这个选项需要远程使用ssh
+				Default: ''
+				gitfs_privkey: /path/to/key
+			GITFS_PASSPHRASE
+				私钥加密口令
+				Default: ''
+				gitfs_passphrase: mypassphrase
+		HG: MERCURIAL REMOTE FILE SERVER BACKEND
+			https://docs.saltstack.com/en/latest/ref/configuration/master.html#hg-mercurial-remote-file-server-backend
+		SVN: SUBVERSION REMOTE FILE SERVER BACKEND
+			https://docs.saltstack.com/en/latest/ref/configuration/master.html#svn-subversion-remote-file-server-backend
+		MINION: MINIONFS REMOTE FILE SERVER BACKEND
+			MINIONFS_ENV
+				指定可用 MinionFS 文件的环境
+				Default: base
+				minionfs_env: minionfs
+			MINIONFS_MOUNTPOINT
+				指定salt文件服务的路径，由minionfs文件提供，salt://可以省略
+				Default: ''
+				minionfs_mountpoint: salt://foo/bar
+			MINIONFS_WHITELIST
+				用来限制那个minion 推送的文件可以通过minionfs来暴露出来，如果使用正则表达式必须匹配整个minion id
+				如果使用这个选项，只有从minion推送的文件 minion匹配指定的表达式才能暴露出来
+				如果和 minionfs_blacklist一起使用，则主机必须匹配白名单但不能匹配黑名单将会被暴露出来
+				Default: []
+				minionfs_whitelist:
+				  - base
+				  - v1.*
+				  - 'mybranch\d+'
+			MINIONFS_BLACKLIST
+				用来限制那个minion 推送的文件不可以通过minionfs来暴露出来，如果使用正则表达式必须匹配整个minion id
+				如果使用这个选项，只有从minion推送的文件 minion匹配指定的表达式不能暴露出来
+				如果和 minionfs_whitelist一起使用，则主机必须匹配白名单但不能匹配黑名单将会被暴露出来
+				Default: []
+				minionfs_blacklist:
+				  - base
+				  - v1.*
+				  - 'mybranch\d+'
+	PILLAR CONFIGURATION
+		PILLAR_ROOTS
+			指定保存pillar sls文件的路径
+			Default:
+				base:
+				  - /srv/pillar
+			可以指定环境和每个环境的路径
+				pillar_roots:
+				  base:
+					- /srv/pillar
+				  dev:
+					- /srv/pillar/dev
+				  prod:
+					- /srv/pillar/prod
+		EXT_PILLAR
+			这个选项在弹出pillar数据时，允许多个扩展的pillar接口被调用，这个配置基于ext_pillar函数
+			默认ext_pillar接口没有配置运行
+			Default: None
+
+			ext_pillar:
+			  - hiera: /etc/hiera.yaml
+			  - cmd_yaml: cat /etc/salt/yaml
+			  - reclass:
+				  inventory_base_uri: /etc/reclass
+		EXT_PILLAR_FIRST
+			这个选项允许扩展pillar源被评估在pillar_roots之前，这个运行pillar目标文件系统从ext_pillar
+			Default: False
+			ext_pillar_first: False
+		GIT EXTERNAL PILLAR (GIT_PILLAR) CONFIGURATION OPTIONS
+			GIT_PILLAR_PROVIDER
+				指定使用git_pillar提供者，可以设置为pygit2 or gitpython。如果未设置则这两个提供者在相同的优先级，会使用第一个兼容提供者的版本
+				git_pillar_provider: gitpython
+			GIT_PILLAR_BASE
+				设置base环境使用的git分支，如果希望的分支是这选项的值，且环境省略在git_pillar配置里，则环境默认使用base
+				Default: master
+				foo分支被分配给base环境，bar映射为bar环境
+					git_pillar_base: foo
+
+					ext_pillar:
+					  - git:
+						- foo https://mygitserver/git-pillar.git
+						- bar https://mygitserver/git-pillar.git
+			GIT_PILLAR_BRANCH
+				如果在git_pillar里省略分支，则默认使用这个分支
+				Default: master
+				
+				git_pillar_branch: pillardata
+				ext_pillar:
+				  - git:
+					- https://mygitserver/pillar1.git    #这个使用的pillardata分支
+					- https://mygitserver/pillar2.git:    #这个使用的pillardata分支
+					  - root: pillar						#可能是指定根目录
+					- foo https://mygitserver/pillar3.git
+
+			GIT_PILLAR_ENV
+				环境被远程的git_pillar所使用，环境通常是分支或tag，如果设置这个选项，则覆盖env环境的值(为分支或tag)。
+				Default: '' (unset)
+				foo分支被标记为base环境，当bar分支要明确指定为bar，添加env:bar，要不然也会被映射为base环境
+				
+				git_pillar_env: base
+					ext_pillar:
+					  - git:
+						- foo https://mygitserver/git-pillar.git
+						- bar https://mygitserver/git-pillar.git:
+						  - env: bar
+				一般推荐不设置该选项，除非要设置所有的远程的git_pillar使用在相同的环境，不考虑使用分支或tag
+			GIT_PILLAR_ROOT
+				相对于仓库根目录的路径，该路径含有git_pillar top文件和sls文件。
+				Default: ''
+				查找pillar的top文件和sls文件在pillar子目录里
+					git_pillar_root: pillar
+
+					ext_pillar:
+					  - git:
+						- master https://mygitserver/pillar1.git
+						- master https://mygitserver/pillar2.git
+				这个选项为全局选项，如果只有一两个仓库需要指定他们的文件在子目录中，则可以在需要特殊行里指定的root，来覆盖 git_pillar_root设置
+					ext_pillar:
+					  - git:
+						- master https://mygitserver/pillar1.git     #top和sls文件在根目录
+						- master https://mygitserver/pillar2.git:		#top和sls文件在pillar目录下
+						  - root: pillar
+			GIT_PILLAR_SSL_VERIFY
+				连接到远程仓库是否忽略ssl验证失败错误,你可以设置为false，当你的git仓库使用自签名证书。这个选项设为true是不安全的，你可以使用ssh来更好的加密
+				Default: True
+				git_pillar_ssl_verify: True
+		GIT EXTERNAL PILLAR AUTHENTICATION OPTIONS
+			这些参数只应用于pygit2的git_pillar_provider，认证工作与gitfs一样
+			GIT_PILLAR_USER
+				指定远程使用HTTPS认证的用户名
+				Default: ''
+				git_pillar_user: git
+			GIT_PILLAR_PASSWORD
+				指定远程使用HTTPS认证的密码，这个参数在仓库没有使用认证时是不需要的
+				Default: ''
+				git_pillar_password: mypassword
+			GIT_PILLAR_INSECURE_AUTH
+				是否启用http认证
+				Default: False
+				git_pillar_insecure_auth: True
+			GIT_PILLAR_PUBKEY
+				ssh的公钥路径
+				Default: ''
+				git_pillar_pubkey: /path/to/key.pub
+			GIT_PILLAR_PRIVKEY
+				ssh的私钥路径
+				Default: ''
+				git_pillar_privkey: /path/to/key
+			GIT_PILLAR_PASSPHRASE
+				ssh私钥加密口令
+				Default: ''
+				git_pillar_passphrase: mypassphrase
+		PILLAR_SOURCE_MERGING_STRATEGY
+			设置两个不同源的覆盖策略，可以设置为5个值:
+				recurse:
+					递归覆盖所有数据
+					第一个源
+						foo: 42
+						bar:
+							element1: True
+					第二个源
+						bar:
+							element2: True
+						baz: quux
+					叠加后
+						foo: 42
+						bar:
+							element1: True
+							element2: True
+						baz: quux
+				recurse_list:
+					它会递归映射叠加数据，类似recurse但是对于列表是聚集在一起，而不是替换。
+					源1
+						foo: 43
+							bar:
+							   - 1
+							   - 2
+					源2
+						bar:
+						   - 3
+						baz: quux
+					叠加后
+						foo: 42
+							bar:
+							   - 1
+							   - 2
+							   - 3
+							baz: quux
+				aggregate:
+					聚集元素当使用#!yamlex 渲染器
+					源1
+						#!yamlex
+						foo: 42
+						bar: !aggregate {
+						  element1: True
+						}
+						baz: !aggregate quux
+					源2
+						#!yamlex
+						bar: !aggregate {
+						  element2: True
+						}
+						baz: !aggregate quux2
+					聚合
+						foo: 42
+						bar:
+						  element1: True
+						  element2: True
+						baz:
+						  - quux
+						  - quux2
+				overwrite:
+					覆盖元素按照执行顺序
+					第一个pillar被执行
+						A:
+						  first_key: blah
+						  second_key: blah
+					第二个pillar被执行
+						A:
+						  third_key: blah
+						  fourth_key: blah
+					聚合
+						A:
+						  third_key: blah
+						  fourth_key: blah
+					
+				smart (default):
+					猜想最好的策略基于渲染者的设置
+	SYNDIC SERVER SETTINGS
+		Salt syndic是salt master用来传递命令从高的salt master到minion通过syndic。如果一个master需要一个 syndic servers在它下面，需要设置order_masters为true。
+		如果一个master需要运行 syndic守护进程，通过设置syndic_master为本地的master server
+		master与syndic他们共享本地minion id和pki_dir
+		ORDER_MASTERS
+			当该master通过syndic控制低级别的master，需要发送额外的数据到公共区域，这种情况下 order_masters必须设置为true
+			Default: False
+			order_masters: False
+		SYNDIC_MASTER
+			如果一个master需要运行salt-syndic来连接高级别的master，指定这个选项为高级别的master
+			Default: None
+			syndic_master: masterofmasters
+			可以连接多个高级master
+				syndic_master:
+				  - masterofmasters1
+				  - masterofmasters2
+			高级master必须配置为multimaster 
+		SYNDIC_MASTER_PORT
+			指定高级别master的端口
+			Default: 4506
+			syndic_master_port: 4506
+		SYNDIC_PIDFILE
+			指定syndic daemon的pid文件
+			Default: salt-syndic.pid
+			syndic_pidfile: syndic.pid
+		SYNDIC_LOG_FILE
+			指定syndic daemon的日志文件
+			Default: syndic.log
+			syndic_log_file: salt-syndic.log
+	PEER PUBLISH SETTINGS
+		当minion允许时，salt minion可以发送目录到其他minion。默认对端"Peer Publication"是禁用的，当它启用，将会对指定minion和指定的命令启用。这个允许安全区分基于minion的命令
+		PEER
+			使用正则表达式匹配minion和一个正则表达式列表来匹配函数。
+			Default: {}
+			允许minion认证为 foo.example.com 执行test and pkg模块的所有函数
+				peer:
+				  foo.example.com:
+					  - test.*
+					  - pkg.*
+			允许所有minion执行所有函数
+				peer:
+				  .*:
+					  - .*
+				这个会造成，任何都能获取到每个minion的root。
+			增加一个附加层限制minion对目标主机能执行的命令
+				peer:
+				  foo.example.com:
+					'db*':           #foo.example.com对于db*的主机，只能执行test和pkg的所有功能
+					  - test.*
+					  - pkg.*
+		PEER_RUN
+			该选项用于打开 runners 在master里用来minion访问master。 peer_run 与peer 配置一样
+			Default: {}
+			允许 foo.example.com执行 manage.up runner
+				peer_run:
+				  foo.example.com:
+					  - manage.up
+	MASTER LOGGING SETTINGS
+		LOG_FILE
+			日志文件，可以是普通文件，本地路径名和本地网络
+			Default: /var/log/salt/master
+			Examples:
+				log_file: /var/log/salt/master
+				log_file: file:///dev/log
+				log_file: udp://loghost:10514
+		LOG_LEVEL
+			日志级别发送到console
+			Default: warning
+			log_level: warning
+		LOG_LEVEL_LOGFILE
+			记录到文件的日志级别，如果没有明确指定则继承log_level设置
+			Default: warning
+			log_level_logfile: warning
+		LOG_DATEFMT
+			输出到console日志里时间和日期格式
+			Default: %H:%M:%S
+			log_datefmt: '%H:%M:%S'
+		LOG_DATEFMT_LOGFILE
+			记录到文件的日志里时间和日期格式
+			Default: %Y-%m-%d %H:%M:%S
+			log_datefmt_logfile: '%Y-%m-%d %H:%M:%S'
+		LOG_FMT_CONSOLE
+			输出到console的日志信息格式
+			日志颜色是在log_fmt_console里启用，而不是color配置，因为日志系统加载在master配置之前
+			console日志颜色由这几个参数来指定
+				%(colorlevel)s %(colorname)s %(colorprocess)s %(colormsg)s
+			当需要被中括号包围时， '[' 和 ']'，在有颜色信息里，则这些颜色格式也会包含填充位。 Color LogRecord属性只在console日志里可用。
+			Default: [%(levelname)-8s] %(message)s
+			log_fmt_console: '%(colorlevel)s %(colormsg)s'
+			log_fmt_console: '[%(levelname)-8s] %(message)s'
+		LOG_FMT_LOGFILE
+			记录到文件的日志格式
+			Default: %(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s
+			log_fmt_logfile: '%(asctime)s,%(msecs)03.0f [%(name)-17s][%(levelname)-8s] %(message)s'
+		LOG_GRANULAR_LEVELS
+			控制更特殊的日志级别
+			Default: {}
+	NODE GROUPS
+		设置minion的逻辑组
+		Default: {}
+		nodegroups:
+		  group1: 'L@foo.domain.com,bar.domain.com,baz.domain.com or bl*.domain.com'
+		  group2: 'G@os:Debian and foo.domain.com'
+		  group3: 'G@os:Debian and N@group1'
+	RANGE CLUSTER SETTINGS
+		RANGE_SERVER
+			指定range服务器地址，它提供集群信息服务
+			Default: ''
+			range_server: range:80
+	INCLUDE CONFIGURATION
+		DEFAULT_INCLUDE
+			指定master默认包含其他文件路径，master.d相对于master配置文件
+			Default: master.d/*.conf
+		INCLUDE
+			包含其他配置文件，如果启用这个选项，则传递路径列表给这个参数。路径可以是绝对路径和相对路径，相对路径则相对于主的配置文件。路径可以使用shell通配符。如果没有文件匹配一个路径，则master会记录一个警告信息
+			Default: not defined
+			# Include files from a master.d directory in the same
+			# directory as the master config file
+			include: master.d/*
+
+			# Include a single extra file into the configuration
+			include: /etc/roles/webserver
+
+			# Include several files and the master.d directory
+			include:
+			  - extra_config
+			  - master.d/*
+			  - /etc/roles/webserver
+	WINDOWS SOFTWARE REPO SETTINGS
+		https://docs.saltstack.com/en/latest/ref/configuration/master.html#windows-software-repo-settings
+	
+	额外没有列出来但是在其他文档中出现
+		keysize
+			出现在https://docs.saltstack.com/en/latest/topics/tutorials/intro_scale.html
+			在salt master或minion第一次启动时会产生RSA-Key-Pairs，这个选项来设这个key的长度，目前master这个选项不能设置，可以在minion里设置
+			默认为4096
+			keysize: 2048
+		roster_order
+			当使用roster的cache模块时，该模块用来通过minion id转换为ipv4地址。该选项用来配置输出ip类型的优先级
+			出现在https://docs.saltstack.com/en/latest/ref/roster/all/salt.roster.cache.html
+			roster_order:
+			  - public
+			  - private
+			  - local
+		启用rest api的化有三种api可以配置
+			rest_cherrypy
+				https://docs.saltstack.com/en/latest/ref/netapi/all/salt.netapi.rest_cherrypy.html
+			rest_tornado
+				https://docs.saltstack.com/en/latest/ref/netapi/all/salt.netapi.rest_tornado.html
+			rest_wsgi
+				https://docs.saltstack.com/en/latest/ref/netapi/all/salt.netapi.rest_wsgi.html
+			

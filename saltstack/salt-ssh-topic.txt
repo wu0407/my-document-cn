@@ -1,0 +1,231 @@
+salt-ssh										版本2015.8.3
+	可以使用salt-ssh -r 'command'来执行shell命令
+	在target里只有 glob and regex target支持salt-ssh
+	默认通过salt-ssh设置的grain在minion重启前会持久保存，重启后丢失。还可以通过roster文件里的thin_dir来持久设置grain
+	默认的读取master的配置文件在/etc/salt/master，还可以自定义配置文件路径里面包含文件名为master的文件，使用 salt-ssh -c /new/config/path
+	在master配置文件里
+		默认roster目录/etc/salt/roster，还可在salt-ssh命令使用 salt-ssh --roster-file roster文件来覆盖这个选项
+		在全局默认的minion选项ssh_minion_opts，还可以在roster文件里每个minion都可子定义minion_opts
+	使用普通用户运行salt ssh
+		默认salt从/etc/salt/读取所有配置。运行salt ssh时，修改了一些路径或报"Permission denied"信息。你要修改两个参数pki_dir and cachedir，这些路径必须对该用户可写。
+		推荐做法是
+			不要修改/etc/salt.复制/etc/salt到新的目录，然后运行salt-ssh -c /new/config/path
+	roster
+		roster系统编译一个数据结构作为targets。targets是一个target系统的列表和如何连接到目标系统的相关属性。salt只需要roster模块返回targets数据结构
+		TARGETS DATA
+			<Salt ID>:       # The id to reference the target system with
+			host:        # The IP address or DNS name of the remote host
+			user:        # The user to log in as
+			passwd:      # The password to log in with
+
+			# Optional parameters
+			port:        # The target system's ssh port number
+			sudo:        # Boolean to run command via sudo
+			tty:         # Boolean: Set this option to True if sudo is also set to
+						 # True and requiretty is also set on the target system
+			priv:        # File path to ssh private key, defaults to salt-ssh.rsa
+			timeout:     # Number of seconds to wait for response when establishing
+						 # an SSH connection
+			timeout:     # Number of seconds to wait for response
+			minion_opts: # Dictionary of minion opts
+			thin_dir:    # The target system's storage directory for Salt
+						 # components. Defaults to /tmp/salt-<hash>.
+		THIN_DIR
+			salt需要上传一个独立的环境到目标系统，这个默认保存在/tmp/salt-<hash>。这个目录会被系统定期清理。
+			如果你需要一个持久的salt环境，比如设置一个持久的grains，则需要改变这个值的设置
+		roster module
+			https://docs.saltstack.com/en/latest/ref/roster/all/index.html
+	DEFINE CLI OPTIONS WITH SALTFILE
+		如果想传递共同的CLI选项到salt-ssh，你可以创建Saltfile文件来自动使用这些选项
+		Saltfile样例
+			salt-ssh:
+			  config_dir: path/to/config/dir
+			  max_procs: 30
+			  wipe_ssh: True
+		现在使用cd到包含Saltfile文件目录，执行salt-ssh \* test.ping，相当于一般的salt-ssh --config-dir=path/to/config/dir --max-procs=30 --wipe \* test.ping
+		布尔值必须使用YAML表达式
+		这些选项必须匹配salt.utils.parsers.SaltSSHOptionParser里的选项dest属性，比如命令行--wipe 在Saltfile是wipe_ssh
+		使用wipe: True or w: True都是错误的
+		具体目录   https://github.com/saltstack/salt/blob/develop/salt/utils/parsers.py line:2626
+			 self.add_option(
+            '-r', '--raw', '--raw-shell',
+            dest='raw_shell',
+            default=False,
+            action='store_true',
+            help=('Don\'t execute a salt routine on the targets, execute a '
+                  'raw shell command')
+        )
+        self.add_option(
+            '--roster',
+            dest='roster',
+            default='flat',
+            help=('Define which roster system to use, this defines if a '
+                  'database backend, scanner, or custom roster system is '
+                  'used. Default is the flat file roster.')
+        )
+        self.add_option(
+            '--roster-file',
+            dest='roster_file',
+            default='',
+            help=('define an alternative location for the default roster '
+                  'file location. The default roster file is called roster '
+                  'and is found in the same directory as the master config '
+                  'file.')
+        )
+        self.add_option(
+            '--refresh', '--refresh-cache',
+            dest='refresh_cache',
+            default=False,
+            action='store_true',
+            help=('Force a refresh of the master side data cache of the '
+                  'target\'s data. This is needed if a target\'s grains have '
+                  'been changed and the auto refresh timeframe has not been '
+                  'reached.')
+        )
+        self.add_option(
+            '--max-procs',
+            dest='ssh_max_procs',
+            default=25,
+            type=int,
+            help='Set the number of concurrent minions to communicate with. '
+                 'This value defines how many processes are opened up at a '
+                 'time to manage connections, the more running processes the '
+                 'faster communication should be, default is %default'
+        )
+        self.add_option(
+            '--extra-filerefs',
+            dest='extra_filerefs',
+            default=None,
+            help='Pass in extra files to include in the state tarball'
+        )
+        self.add_option(
+            '-v', '--verbose',
+            default=False,
+            action='store_true',
+            help=('Turn on command verbosity, display jid')
+        )
+        self.add_option(
+            '-s', '--static',
+            default=False,
+            action='store_true',
+            help=('Return the data from minions as a group after they '
+                  'all return.')
+        )
+        self.add_option(
+            '-w', '--wipe',
+            default=False,
+            action='store_true',
+            dest='wipe_ssh',
+            help='Remove the deployment of the salt files when done executing.',
+        )
+        self.add_option(
+            '-W', '--rand-thin-dir',
+            default=False,
+            action='store_true',
+            help=('Select a random temp dir to deploy on the remote system. '
+                  'The dir will be cleaned after the execution.'))
+        self.add_option(
+            '--python2-bin',
+            default='python2',
+            help='Path to a python2 binary which has salt installed'
+        )
+        self.add_option(
+            '--python3-bin',
+            default='python3',
+            help='Path to a python3 binary which has salt installed'
+        )
+        self.add_option(
+            '--jid',
+            default=None,
+            help='Pass a JID to be used instead of generating one'
+        )
+
+        auth_group = optparse.OptionGroup(
+            self, 'Authentication Options',
+            'Parameters affecting authentication'
+        )
+        auth_group.add_option(
+            '--priv',
+            dest='ssh_priv',
+            help='Ssh private key file'
+        )
+        auth_group.add_option(
+            '-i',
+            '--ignore-host-keys',
+            dest='ignore_host_keys',
+            default=False,
+            action='store_true',
+            help='By default ssh host keys are honored and connections will '
+                 'ask for approval. Use this option to disable '
+                 'StrictHostKeyChecking.'
+        )
+        auth_group.add_option(
+            '--no-host-keys',
+            dest='no_host_keys',
+            default=False,
+            action='store_true',
+            help='Removes all host key checking functionality from SSH session.'
+        )
+        auth_group.add_option(
+            '--user',
+            dest='ssh_user',
+            default='root',
+            help='Set the default user to attempt to use when '
+                 'authenticating'
+        )
+        auth_group.add_option(
+            '--passwd',
+            dest='ssh_passwd',
+            default='',
+            help='Set the default password to attempt to use when '
+                 'authenticating'
+        )
+        auth_group.add_option(
+            '--askpass',
+            dest='ssh_askpass',
+            default=False,
+            action='store_true',
+            help='Interactively ask for the SSH password with no echo - avoids '
+                 'password in process args and stored in history'
+        )
+        auth_group.add_option(
+            '--key-deploy',
+            dest='ssh_key_deploy',
+            default=False,
+            action='store_true',
+            help='Set this flag to attempt to deploy the authorized ssh key '
+                 'with all minions. This combined with --passwd can make '
+                 'initial deployment of keys very fast and easy'
+        )
+        auth_group.add_option(
+            '--identities-only',
+            dest='ssh_identities_only',
+            default=False,
+            action='store_true',
+            help='Use the only authentication identity files configured in the '
+                 'ssh_config files. See IdentitiesOnly flag in man ssh_config'
+        )
+        auth_group.add_option(
+            '--sudo',
+            dest='ssh_sudo',
+            default=False,
+            action='store_true',
+            help='Run command via sudo.'
+        )
+        self.add_option_group(auth_group)
+
+        scan_group = optparse.OptionGroup(
+            self, 'Scan Roster Options',
+            'Parameters affecting scan roster'
+        )
+        scan_group.add_option(
+            '--scan-ports',
+            default='22',
+            dest='ssh_scan_ports',
+            help='Comma-separated list of ports to scan in the scan roster.',
+        )
+        scan_group.add_option(
+            '--scan-timeout',
+            default=0.01,
+            dest='ssh_scan_timeout',
+            help='Scanning socket timeout for the scan roster.',

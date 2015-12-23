@@ -1,0 +1,81 @@
+salt-ssh										版本2015.8.3
+	https://docs.saltstack.com/en/latest/ref/cli/salt-ssh.html
+	概要
+		salt-ssh '*' [ options ] sys.doc
+		salt-ssh -E '.*' [ options ] sys.doc cmd
+	描述
+		salt ssh允许salt程序能有通过ssh执行
+	选项
+		-r, --raw, --raw-shell
+			执行一个原始的shell命令
+		--priv
+			指定认证时使用的私钥
+		--roster
+			定义使用那个roster系统(模块)，这个定义使用一个数据后端，扫描器或自定义的roster系统。默认为 flat file roster
+		--roster-file
+			自定义一个roster文件，替换默认的在salt配置文件里配置的文件。默认为salt master配置文件里roster选项的配置
+		--refresh, --refresh-cache
+			强制刷新master端的关于目标的数据缓存。当目标的grains已经被改变且还没到达自动刷新时间的时刻，需要这个选项
+		--max-procs
+			设置并发连接到多少个minion。这个值定义多少个进程被打开在管理连接时，更多进程会导致更快的通信，默认为25个进程
+		-i, --ignore-host-keys
+			自动接受目标的host key，解决使用ssh主机key来通信时，弹出的是否接受目标的key
+				要不然会输出
+					The host key needs to be accepted, to auto accept run salt-ssh with the -i flag:
+					The authenticity of host '10.10.50.99 (10.10.50.99)' can't be established.
+					ECDSA key fingerprint is e8:23:4e:bb:41:e3:5f:af:19:a5:e4:b4:34:c6:ad:08.
+					Are you sure you want to continue connecting (yes/no)? 
+		--passwd
+			设置默认尝试认证密码
+		--key-deploy
+			设置这个选项，会尝试把 authorized ssh key部署到所有的minion。这个选项和--passwd使用可以使初始化部署key非常快速和容易
+		--version
+			打印版本
+		--versions-report
+			显示程序依赖的组件的版本，然后退出
+		-h, --help
+			显示帮助信息，然后退出
+		-c CONFIG_DIR, --config-dir=CONFIG_dir
+			本地salt配置目录。这个目录包含salt master和minion的配置文件。默认为/etc/salt
+		TARGET SELECTION
+			-E, --pcre
+				目标表达式将会被解析为PCRE正则表达式而不是shell通配符
+			-L, --list
+				目标表达式将会被解析为逗号分隔的列表
+				server1.foo.bar,server2.foo.bar,example7.quo.qux
+			-G, --grain
+				目标表达式是通过在minion里的salt grains系统来返回的，这个目标表达式格式为 '<grain value>:<glob expression>'; example: 'os:Arch*'
+				这个在0.9.8版本后使用的是通配符表达式，而不是正则表达式
+			--grain-pcre
+				目标表达式匹配值通过minion里的salt grains系统来返回的，这个使用的PCRE正则匹配。这个目标表达式格式为 '<grain value>:<glob expression>'; example: 'os:Arch*'
+			-N, --nodegroup
+				使用在master配置文件中预定义的捆绑目标
+			-R, --range
+				使用范围表达式来验证目标，代替使用shell通配符来匹配目标，范围表达式类似%cluster。
+				使用range选项需要安装 range server且本地master配置文件里包含了range server配置
+		LOGGING OPTIONS
+			这些日志选项覆盖在配置文件中的配置
+			-l LOG_LEVEL, --log-level=LOG_LEVEL
+				console日志级别，可以设置为all, garbage, trace, debug, info, warning, error, quiet。默认为warning
+			--log-file=LOG_FILE
+				日志文件路径，默认/var/log/salt/ssh.
+			--log-file-level=LOG_LEVEL_LOGFILE
+				日志文件记录级别，可以设置为all, garbage, trace, debug, info, warning, error, quiet。默认为warning
+		OUTPUT OPTIONS
+			--out
+				设置一个输出器用来显示返回数据，可以设置为grains, highstate, json, key, overstatestage, pprint, raw, txt, yaml。
+				一些输出器只格式化特殊函数的返回数据，比如grains输出器，不会工作于非grains数据
+				如果输出器不支持数据传递给它，则salt将会回滚使用pprint输出器且显示的返回数据使用python pprint标准库模块
+				如果使用--out=json，同样需要配置--static。没有static选项，你将会获得分开的JSON字符串，这会造成JSON输出一整块未知。这是由于使用迭代输出器。
+			--out-indent OUTPUT_INDENT, --output-indent OUTPUT_INDENT
+				打印输出多少个空白缩进，负数表示禁用缩进。只有可应用的输出器才支持缩进
+			--out-file=OUTPUT_FILE, --output-file=OUTPUT_FILE
+				输出写入到指定文件
+			--no-color
+				输出无颜色
+			--force-color
+				强制输出有颜色
+				颜色的意义
+					绿色代表成功，红色代表失败，蓝色表示有改变和改变成功，黄色代表期望的特性改变在配置中
+		SEE ALSO
+			salt(7) salt-master(1) salt-minion(1)
