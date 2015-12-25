@@ -1,0 +1,46 @@
+FILE SERVER BACKENDS							版本2015.8.3
+	https://docs.saltstack.com/en/latest/ref/file_server/backends.html#file-server-backends
+	在salt0.12.0，引进了文件服务模块。这个特性通过集成后端文件服务增加salt master的能力。
+	文件服务后端允许Salt file server作为透明网桥来操作外部资源。一个非常好的例子使用git作为后端，
+	它允许salt把一个或多个git仓库来当作salt服务的文件源，但是其他一些文件源也是可以的。点击这里
+	(https://docs.saltstack.com/en/latest/ref/file_server/all/index.html#all-salt-fileserver)
+	查看所有salt文件服务支持的后端列表。
+	
+	ENABLING A FILESERVER BACKEND
+		文件服务后端可以通过fileserver_backend选项来启用。
+			fileserver_backend:
+			  - git
+		查看文档(https://docs.saltstack.com/en/latest/ref/file_server/all/index.html#all-salt-fileserver)
+		来设置正确值来启用每个文件后端。
+	USING MULTIPLE BACKENDS
+		如果fileserver_backend在master配置文件中没有定义，salt将会使用roots作为后端，但是fileserver_backend
+		选项支持多个后端。当使用多个后端，启用后端的文件将会聚合为一个单一的虚拟文件系统。当一个文件被请求，则
+		会从后端里依次查找该文件，且第一个匹配文件的后端将会返回该文件。
+			fileserver_backend:
+			  - roots
+			  - git
+		在这个配置里，定义在file_roots里的环境和文件会被首先查找，且如果文件未发现，则会去查找定义在gitfs_remotes
+		里的git仓库。
+	ENVIRONMENTS
+		只按fileserver_backend添加的顺序还是不够的，还需要通过设置一个文件服务环境来设置不同资源的顺序。
+		比如下面给的file_roots配置，如果/srv/salt/dev/foo.txt and /srv/salt/prod/foo.txt都在master里，
+		则在dev环境下的salt://foo.txt将会定位到/srv/salt/dev/foo.txt，但是在base环境下将会定位到/srv/salt/prod/foo.txt。
+			file_roots:
+			  base:
+				- /srv/salt/prod
+			  qa:
+				- /srv/salt/qa
+				- /srv/salt/prod
+			  dev:
+				- /srv/salt/dev
+				- /srv/salt/qa
+				- /srv/salt/prod
+		当使用git后端也是类似的，如果两个仓库都包含hotfix23 branch/tag,且这两个仓库在这个分支或tag的根目录下
+		都包含bar.txt，则在hotfix23环境下salt://bar.txt将会从first仓库中获取该文件。
+			gitfs_remotes:
+			  - https://mydomain.tld/repos/first.git
+			  - https://mydomain.tld/repos/second.git
+		注意:
+			基于环境映射到不同的文件服务后端。在这个实例中，映射明确定义在roots。而在VCS后端(git, hg, svn)中，把branches/tags/bookmarks/来作为环境。在minion里的后端，文件都在一个单一的环境中，它通过minionfs_env
+			选项来指定。
+			查看每个后端文档获取更详细的关于环境如何映射的解释。

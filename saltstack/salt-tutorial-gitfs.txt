@@ -1,0 +1,300 @@
+tutorial-gitfs							版本2015.8.3
+	https://docs.saltstack.com/en/latest/topics/tutorials/gitfs.html
+	这个gitfs后端允许salt从git仓库里获取文件。启用它需要，在fileserver_backend列表里添加git，
+	且在gitfs_remotes里配置一个或多个仓库。
+	分支和标签变成文件服务的环境。
+	INSTALLING DEPENDENCIES
+		https://docs.saltstack.com/en/latest/topics/tutorials/gitfs.html#installing-dependencies
+	SIMPLE CONFIGURATION
+		为了使用gitfs后端，只需要在master里改变两个配置:
+		1.添加git到master配置文件里的fileserver_backend列表
+			fileserver_backend:
+			  - git
+		2.在gitfs_remotes指定一个或多个git://, https://, file://, or ssh:// URLs，用来配置那个仓库
+			要被缓存和查找需要的文件:
+				gitfs_remotes:
+				  - https://github.com/saltstack-formulas/salt-formula.git
+			可以配置为ssh连接，类似scp语法:
+				gitfs_remotes:
+				  - git@github.com:user/repo.git
+				  - ssh://user@domain.tld/path/to/repo.git
+			ssh如何认证的相关信息在这里(https://docs.saltstack.com/en/latest/topics/tutorials/gitfs.html#gitfs-authentication)
+			注意:
+				Dulwich不识别ssh:// urls，必须使用git+ssh://来替代。salt 2015.5.0和以后的版本
+				在获取url时将会自动增加git+到URL开头，但是先前的salt版本都要使用git+ssh://，要不然会获取失败。
+		3.重启master加载新的配置。
+		注意:
+			在一个master/minion安装时，master一旦从远程git获取的文件，该文件就会被缓存，因此
+			minion不需要直接访问git仓库
+	MULTIPLE REMOTES
+		gitfs_remotes选项接受一个依次的远程git列表，用来缓存和查找，按照列表顺序来查找需要的文件。
+		一个简单的场景来说明这个查找行为:
+		假设gitfs_remotes选项指定了三个git源:
+			gitfs_remotes:
+			  - git://github.com/example/first.git
+			  - https://github.com/example/second.git
+			  - file:///root/third
+		且每个仓库包含这些文件:
+			first.git:
+				top.sls
+				edit/vim.sls
+				edit/vimrc
+				nginx/init.sls
+
+			second.git:
+				edit/dev_vimrc
+				haproxy/init.sls
+
+			third:
+				haproxy/haproxy.conf
+				edit/dev_vimrc
+		salt将会从配置文件中远程gitfs仓库顺序来查找需要的文件。git://github.com/example/first.git将会首先被查找。
+		如果找到需要的文件，则使用该文件且不会执行其他查找。比如:
+			请求salt://haproxy/init.sls将会从 https://github.com/example/second.git获取。
+			请求salt://haproxy/haproxy.conf 将会从file:///root/third仓库。
+		注意
+			这个例子主要为了说明后端gitfs行为。不要认为这个例子是推荐来布局文件和git仓库方法。
+			file://前缀代表git仓库在本地目录里。它仍然会使用file:// URL作为远程仓库，而不是复制git仓库到salt缓存里。
+			这意味着任何你需要访问的文献，必须在指定的仓库里作为本地文献存在。
+		警告:
+			salt 2014.1.0之前版本不能容忍修改远程的顺序或修改已经存在的远程的uri。在这些版本里，
+			修改远程的最好方法是在重启salt-master服务之前，移除gitfs缓存目录(/var/cache/salt/master/gitfs)。
+	PER-REMOTE CONFIGURATION PARAMETERS
+		New in version 2014.7.0
+		下面的master配置参数都是全局的(这些都会应用到所有的配置的gitfs remotes):
+			gitfs_base
+			gitfs_root
+			gitfs_mountpoint (new in 2014.7.0)
+			gitfs_user (pygit2 only, new in 2014.7.0)
+			gitfs_password (pygit2 only, new in 2014.7.0)
+			gitfs_insecure_auth (pygit2 only, new in 2014.7.0)
+			gitfs_pubkey (pygit2 only, new in 2014.7.0)
+			gitfs_privkey (pygit2 only, new in 2014.7.0)
+			gitfs_passphrase (pygit2 only, new in 2014.7.0)
+		这些参数能够被每个远程底层覆盖。这个允许自定义很多东西。
+		这里是一些使用例子:
+			gitfs_provider: pygit2
+			gitfs_base: develop
+
+			gitfs_remotes:
+			  - https://foo.com/foo.git
+			  - https://foo.com/bar.git:
+				- root: salt
+				- mountpoint: salt://foo/bar/baz
+				- base: salt-base
+			  - http://foo.com/baz.git:
+				- root: salt/states
+				- user: joe
+				- password: mysupersecretpassword
+				- insecure_auth: True
+		重要:
+			在每个远程配置中两个重要的区别需要注意:
+				1.每个远程的url必须后面跟一个冒号:。
+				2.每个远程配置参数名必须和全局配置类似，只是移除了开头的gitfs_。
+		在上面的配置样例中，下面这些是true:
+			1.第一个和第三个gitfs远程将会使用develop branch/tag作为base环境，而第二个远程使用salt-base 
+			  branch/tag作为base环境。
+			2.在第一个远程将会提供仓库里所有的文件。第二个远程只提供salt目录下的文件(包括子目录)，
+			  而第三个远程只提供salt/states目录下的文件(包括子目录)。
+			3.从第二个远程提供的文件，将会位于salt://foo/bar/baz, 而第一个和第三个远程，将会位于salt文件
+			  服务的命名空间的根目录(salt://)。
+			4.第三个远程会覆盖默认无安全认证的远程的行为。
+	SERVING FROM A SUBDIRECTORY
+		gitfs_remotes参数允许从仓库的子目录里提供文件。这个允许部分仓库暴露给salt文件服务。
+		假设仓库里的文件布局
+			.gitignore
+			README.txt
+			foo/
+			foo/bar/
+			foo/bar/one.txt
+			foo/bar/two.txt
+			foo/bar/three.txt
+			foo/baz/
+			foo/baz/top.sls
+			foo/baz/edit/vim.sls
+			foo/baz/edit/vimrc
+			foo/baz/nginx/init.sls
+		下面配置样例，只从foo/baz提供文件，忽略仓库里的其他文件:
+			gitfs_remotes:
+			  - git://mydomain.com/stuff.git
+
+			gitfs_root: foo/baz
+		这个root配置项能够配置在每个远程底下。
+	MOUNTPOINTS
+		这个gitfs_mountpoint参数意味者，将会在salt://后面填充指定的路径(预填充指定的路径到文件服务)。
+		这个允许使用存在的仓库，而不需要重新组织一个仓库或设计为这种salt文件服务布局。
+		在增加这个特性之前，如果一个文件嵌套在很深的目录里(比如，salt://webapps/foo/files/foo.conf)，
+		它将会需要确保文件正确的位于远程仓库里，且这个所有父目录都需要(present)存在(比如，webapps/foo/files/目录
+		需要在仓库的根目录中存在)。
+		下面例子将会允许文件foo.conf在仓库的根目录里，从salt文件服务路径salt://webapps/foo/files/foo.conf被提供。
+			gitfs_remotes:
+			  - https://mydomain.com/stuff.git
+
+			gitfs_mountpoint: salt://webapps/foo/files
+		mountpoint项能够配置在每个远程底下。
+	USING GITFS ALONGSIDE OTHER BACKENDS(gitfs与其他后端一起使用)
+		有些时候使用多个后端更有意义;比如sls文件存储在git但是大文件直接存储在master里。
+		这个级联查找逻辑用在使用多个远程后端。如果fileserver_backend选项包含多个后端:
+			fileserver_backend:
+			  - roots
+			  - git
+		则roots后端(默认后端文件在/srv/salt)将会被第一个查找请求文件;则如果没有发现需要的文件，则每个远程git都会被查找。
+	BRANCHES, ENVIRONMENTS, AND TOP FILES
+		当使用gitfs后端，分支和标签将会被映射为环境并使用分支/标签做为标识。
+		因此，典型的设置base, qa, dev，下面列出的分支将会被使用:
+			master
+			qa
+			dev
+		在运行时，不同的分支top.sls文件会聚合成一个。由于这个能够导致更复杂的配置，所以推荐
+		设置设置一个隔离的仓库，只包含了top.sls文件且只有单一的master分支。
+		为了映射非master分支作为base环境，使用gitfs_base参数。
+			gitfs_base: salt-base
+		base项同样能够配置在每个远程底下。
+	ENVIRONMENT WHITELIST/BLACKLIST
+		gitfs_env_whitelist and gitfs_env_blacklist参数控制那个branches/tags能够做为文件服务的环境。
+		精确匹配，通配符和正则表达式都支持，且按照这个顺序来评估。如果使用正则表达式，^和$必须省略，
+		且这个表达式必须完全匹配这个branch/tag.
+			gitfs_env_whitelist:
+			  - base
+			  - v1.*
+			  - 'mybranch\d+'
+		注意:
+			这个例子中v1.*，将会匹配为通配符和正则表达式(最终它将会匹配为通配符，因为通配符在正则表达式之前被评估)。
+		这个白名单/黑名单行为不同，依赖于两个选项是否一起使用:
+			如果只使用gitfs_env_whitelist，则只有在白名单里匹配的branches/tags能够作为环境。
+			如果只使用gitfs_env_blacklist，则只有在黑名单里匹配的branches/tags不能作为环境。
+			如果两个都使用，则匹配白名单，但是没有匹配黑名单的branches/tags能够作为环境。
+	AUTHENTICATION
+		PYGIT2
+			New in version 2014.7.0.
+			0.20.3版本的pygit2同时支持HTTPS和SSH，它是最早salt用来支持gitfs的pygit2版本。
+			注意:
+				下面这个例子使用的是每个远程配置参数，这个是在salt 2014.7.0版本的新特性。更多信息在这里
+				https://docs.saltstack.com/en/latest/topics/tutorials/gitfs.html#gitfs-per-remote-config
+		HTTPS
+			https仓库需要验证，用户名和密码能够这样提供:
+				gitfs_remotes:
+				  - https://domain.tld/myrepo.git:
+					- user: git
+					- password: mypassword
+			如果仓库使用http代替https，则salt默认会拒绝认证，这个行为能够通过增加一个insecure_auth参数来覆盖:
+				gitfs_remotes:
+				  - http://domain.tld/insecure_repo.git:
+					- user: git
+					- password: mypassword
+					- insecure_auth: True
+		SSH
+			ssh仓库能够被配置使用ssh://协议，或使用类似scp语法。所以这两个配置是一样的。
+				ssh://git@github.com/user/repo.git
+				git@github.com:user/repo.git
+			ssh仓库验证必须配置gitfs_pubkey and gitfs_privkey(或每个远程配置)。如果私钥设置了口令保护，则
+			它还需要配置gitfs_passphrase(或在每个远程passphrase配置)。举个例子:
+				gitfs_remotes:
+				  - git@github.com:user/repo.git:
+					- pubkey: /root/.ssh/id_rsa.pub
+					- privkey: /root/.ssh/id_rsa
+					- passphrase: myawesomepassphrase
+			最后ssh主机key必须增加到known_hosts文件里。
+			(https://docs.saltstack.com/en/latest/topics/tutorials/gitfs.html#gitfs-ssh-fingerprint)
+		GITPYTHON
+			GitPython只支持无口令公钥认证。这些在pygit2里的认证参数 (pubkey, privkey, etc.)不能工作在
+			GitPython。
+				gitfs_remotes:
+				  - ssh://git@github.com/example/salt-states.git
+			由于GitPython是包装了git CLI，则私钥必须位于运行master用户的~/.ssh/id_rsa路径，且权限
+			必须是0600。在repo url里没有用户，则GitPython(只在ssh中)尝试使用当前用户(换种说法，
+			运行master的用户，通常是root)登陆。
+			如果需要使用一个key，则~/.ssh/config能够配置希望使用的key。更多关于如何配置这个信息，在ssh_config
+			man手册里。这里是一个在~/.ssh/config里为gitfs增加替代key的例子:
+				Host github.com
+				IdentityFile /root/.ssh/id_rsa_gitfs
+			这个Host参数必须是一个主机名，该主机名匹配git仓库的域名。
+			它同样需要添加这个ssh host key到known_host文件里。除了严格主机名检查被禁用，这个通过
+			在~/.ssh/config增加StrictHostKeyChecking no。
+				Host github.com
+					IdentityFile /root/.ssh/id_rsa_gitfs
+					StrictHostKeyChecking no
+			无论如何，这个通常是非常不安全的，且不推荐这么做。
+		ADDING THE SSH HOST KEY TO THE KNOWN_HOSTS FILE
+			为了使用ssh认证，它需要远程仓库的ssh host key在~/.ssh/known_hosts文件里。如果一个master
+			即是master也是一个minion，则这个添加可以通过使用ssh.set_known_host function:
+				# salt mymaster ssh.set_known_host user=root hostname=github.com
+				mymaster:
+					----------
+					new:
+						----------
+						enc:
+							ssh-rsa
+						fingerprint:
+							16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48
+						hostname:
+							|1|OiefWWqOD4kwO3BhoIGa0loR5AA=|BIXVtmcTbPER+68HvXmceodDcfI=
+						key:
+							AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
+					old:
+						None
+					status:
+						updated
+			如果不是，则很容易使用su到运行salt-master用户(通常是root)，然后尝试通过ssh登陆该服务器:
+				$ su
+				Password:
+				# ssh github.com
+				The authenticity of host 'github.com (192.30.252.128)' can't be established.
+				RSA key fingerprint is 16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48.
+				Are you sure you want to continue connecting (yes/no)? yes
+				Warning: Permanently added 'github.com,192.30.252.128' (RSA) to the list of known hosts.
+				Permission denied (publickey).
+			这个无所谓登陆是否成功，回应yes将会写入这个指纹到known_hosts文件。
+		VERIFYING THE FINGERPRINT
+			为了验证正确的指纹被添加，做好的方法是查看它。其中一种方法是使用nmap:
+				$ nmap github.com --script ssh-hostkey
+
+				Starting Nmap 5.51 ( http://nmap.org ) at 2014-08-18 17:47 CDT
+				Nmap scan report for github.com (192.30.252.129)
+				Host is up (0.17s latency).
+				Not shown: 996 filtered ports
+				PORT     STATE SERVICE
+				22/tcp   open  ssh
+				| ssh-hostkey: 1024 ad:1c:08:a4:40:e3:6f:9c:f5:66:26:5d:4b:33:5d:8c (DSA)
+				|_2048 16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48 (RSA)
+				80/tcp   open  http
+				443/tcp  open  https
+				9418/tcp open  git
+
+				Nmap done: 1 IP address (1 host up) scanned in 28.78 seconds
+			其他方法是检查自己的known_hosts文件，只需一行命令:
+				$ ssh-keygen -l -f /dev/stdin <<<`ssh-keyscan -t rsa github.com 2>/dev/null` | awk '{print $2}'
+				16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48
+	REFRESHING GITFS UPON PUSH
+		默认salt每60秒更新远程文件服务后端。无论如何，如果希望快速刷新，Reactor系统能够被用在每个推
+		送时master更新，提供这个git服务是一个salt minion。这个需要三个步骤来执行:
+			1.在master，创建一个/srv/reactor/update_fileserver.sls文件，包含以下这些内容:
+				update_fileserver:
+				  runner.fileserver.update
+			2.在master配置文件里添加如下的reactor配置:
+				reactor:
+				  - 'salt/fileserver/gitfs/update':
+					- /srv/reactor/update_fileserver.sls
+			3.在git服务器，添加一个post-receive hook(post接收跟踪):
+				#!/usr/bin/env sh
+
+				salt-call event.fire_master update salt/fileserver/gitfs/update
+				(git接受push，触发执行这个命令，这个命令返回event到master的salt/fileserver/gitfs/update，
+				然后master监测salt/fileserver/gitfs/update改变，则执行reactor里的/srv/reactor/update_fileserver.sls文件
+				这个文件执行runner.fileserver.update)
+		这个例子中，在event.fire_master右边的update参数可以是任何东西，因为它代表数据在event里传递
+		，且传递的数据会被这个reactor忽略。
+		类似，salt/fileserver/gitfs/update标签能够被替换成任何东西，只要使用是一致的。
+	USING GIT AS AN EXTERNAL PILLAR SOURCE
+		git的扩展pillar在2015.8.0版本被重写。这个重写引进pygit2支持(允许访问认证仓库)，同时支持更多粒度的每个远
+		程配置支持。
+		为了使用新特性，必须设置ext_pillar配置为git。新配置文件结构在这里(https://docs.saltstack.com/en/latest/ref/pillar/all/salt.pillar.git_pillar.html
+		#git-pillar-2015-8-0-and-later)
+		在2015.8.0之前版本，文档在这里
+		https://docs.saltstack.com/en/latest/ref/pillar/all/salt.pillar.git_pillar.html#git-pillar-pre-2015-8-0
+	WHY AREN'T MY CUSTOM MODULES/STATES/ETC. SYNCING TO MY MINIONS?(为什么我自定义的模块/state等不能同步到minion)
+		在0.16.3和更老的版本，当使用git文件服务后端，在获取文件时相应的GitPython版本可能产生错误，它会造成salt抓取失败。
+		对于获取进程不是致命，这些中断文件服务更新，这个在自定义类型同步之前更新，且因此打断同步自身。
+		尝试在master配置文件里禁用git文件服务后端，重启master，然后尝试重新同步。
+		这个问题不会在Salt 0.16.4和更新版本.
+		
