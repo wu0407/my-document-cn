@@ -78,8 +78,8 @@ StandardOutput=
 	null连接标准输出到/dev/null,比如往它里面写入任何动作都会丢失。
 	tty连接标准输出到一个tty(通过TTYPath=设置)。如果这个tty只用来输出。则执行进程不会变成该终端的控制进程，且不会失败或不会等待其他进程释放该终端。
 	journal连接标准输出到journal通过journalctl(1)来访问journal。注意任何东西写入到syslog or kmsg会隐式存入journal。下面两个列出的选项是这个选项的扩展集。
-	syslog连接标准输出到系统 syslog(3)服务，而不是journal。注意这个journal守护进程通常配置为转发所有接收到syslog，在这种情况下这个选项与journal没有不同。
-	kmsg连接标准输出到内核日志buffer，可以通过dmesg(1)来访问，而不是journal。journal守护进程可能被配置问发送所有日志到kmsg，在这种情况下与journal选项没有不同。
+	syslog连接标准输出到系统 syslog(3)服务，除了journal之外。注意这个journal守护进程通常配置为转发所有接收到syslog，在这种情况下这个选项与journal没有不同。
+	kmsg连接标准输出到内核日志buffer，可以通过dmesg(1)来访问，除了journal之外。journal守护进程可能被配置问发送所有日志到kmsg，在这种情况下与journal选项没有不同。
 	journal+console, syslog+console and kmsg+console分别类似于上面三个选项但是同样复制输出到系统console。
 	socket连接标准输出一个socket激活的socket。语义上类似与StandardInput=选项里的socket选项一样。
 	这个选项的默认值设置在 systemd-system.conf(5)里的DefaultStandardOutput=选项，它的默认值为journal。注意设置这个参数可能造成额外的依赖被增加到unit里。

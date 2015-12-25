@@ -1,0 +1,86 @@
+SALT.PILLAR.GIT_PILLAR								版本2015.8.3
+	https://docs.saltstack.com/en/latest/ref/pillar/all/salt.pillar.git_pillar.html
+	USE A GIT REPOSITORY AS A PILLAR SOURCE
+		注意:
+			这个扩展pillar已经在2015.8.0版本里重写。这个老的扩展pillar配置方法将会被维护在couple 
+			releases(同一版本不同分支)版本里，允许一段时间里过渡到新的使用方法。
+		这个扩展pillar允许一个pillar的top文件和pillar的sls文件从git仓库里获取。
+		无论如何，由于git_pillar跟pillar_roots参数不一样，所以配置有一点不同。这个pillar top文件仍然必须包含
+		相关环境，就像这样:
+			base:
+			  '*':
+				- foo
+		这个branch/tag映射为环境，详细配置描述在文档下面。
+	CONFIGURING GIT_PILLAR FOR SALT RELEASES BEFORE 2015.8.0
+		在salt 2015.8.0版本以前，GitPython只支持git_pillar。未知仓库能够配置在ext_pillar配置参数里，就像这样:
+			ext_pillar:
+			  - git: master https://gitserver/git-pillar.git root=subdirectory
+		这个指定的仓库格式为<branch> <repo_url>，包含一个自定义的root参数(在2014.7.0增加)，它允许pillar sls
+		文件从子目录提供(类似gitfs里的gitfs_root)。
+		为在相同的仓库里使用多个分支，在ext_pillar下必须指定多行:
+			ext_pillar:
+			  - git: master https://gitserver/git-pillar.git
+			  - git: dev https://gitserver/git-pillar.git
+		重新映射指定分支到指定的pillar环境，使用<branch>:<env>:
+			ext_pillar:
+			  - git: develop:dev https://gitserver/git-pillar.git
+			  - git: master:prod https://gitserver/git-pillar.git
+		在这个例子中，develop分支需要自己的top.sls文件里包含dev章节，就像这样:
+			dev:
+			  '*':
+				- bar
+		master分支需要自己的top.sls文件里包含prod章节:
+			prod:
+			  '*':
+				- bar
+		如果分支名指定为__env__，则git_pillar将会使用gitfs_base指定的分支:
+			ext_pillar:
+			  - git: __env__ https://gitserver/git-pillar.git root=pillar
+		相应的pillar top文件就像这样:
+			{{env}}:
+			  '*':
+				- bar
+	CONFIGURING GIT_PILLAR FOR SALT RELEASES 2015.8.0 AND LATER
+		注意:
+			在2015.8.0版本，git扩展pillar配置方法被改变，且现在非常接近于git文件服务后端。如果salt检测到
+			老的配置结构，则它会使用2015.8.0之前的代码来编译这个扩展pillar。一个警告将会被记录。
+		在2015.8.0版本开始，现在在GitPython之外支持pygit2(Dulwich将会不支持forseeable特性).
+		这个需要 GitPython and pygit2一样做为gitfs，描述在这里
+		https://docs.saltstack.com/en/latest/topics/tutorials/gitfs.html#gitfs-dependencies
+		重要:
+			git_pillar拥有自己的全局配置参数。而它可能看起来就像直观使用gitfs配置参数来管理git_pillar，
+			但是它不起作用。主要区别在使用不同的组件，这个组件使用salt git后端代码不一样。比如，在git_pillar
+			里需要指定哪个branch/tag用在git_pillar远程。这个行为与gitfs相反，在gitfs里branch/tag会生成为该环境(哪个分支设置成base环境)。
+			关于git_pillar配置选项和使用文档在
+			https://docs.saltstack.com/en/latest/ref/configuration/master.html#git-pillar-config-opts
+		这是一个git_pillar例子:
+			ext_pillar:
+			  - git:
+				# Use 'prod' instead of the branch name 'production' as the environment
+				- production https://gitserver/git-pillar.git:
+				  - env: prod
+				# Use 'dev' instead of the branch name 'develop' as the environment
+				- develop https://gitserver/git-pillar.git:
+				  - env: dev
+				# No per-remote config parameters (and no trailing colon), 'qa' will
+				# be used as the environment
+				- qa https://gitserver/git-pillar.git
+				# SSH key authentication
+				- master git@other-git-server:pillardata-ssh.git:
+				  # Pillar SLS files will be read from the 'pillar' subdirectory in
+				  # this repository
+				  - root: pillar
+				  - privkey: /path/to/key
+				  - pubkey: /path/to/key.pub
+				  - passphrase: CorrectHorseBatteryStaple
+				# HTTPS authentication
+				- master https://other-git-server/pillardata-https.git:
+				  - user: git
+				  - password: CorrectHorseBatteryStaple
+			与旧的git_pillar配置方法主要的不同是多个远程能够配置在一个git下面。可以使用多个git，但是不需要。
+			远程将会依次进行评估。
+			支持每个远程配置参数，且全局的git_pillar配置参数也能够设置。
+			添加了pygit2支持，git_pillar能够交互的支持远程认证。认证工作就像gitfs，只有全局配置参数前缀gitfs替换
+			为git_pillar (e.g. git_pillar_pubkey, git_pillar_privkey, git_pillar_passphrase, etc.).
+			salt.pillar.git_pillar.ext_pillar(minion_id, repo, pillar_dirs)
+				Checkout the ext_pillar sources and compile the resulting pillar SLS
