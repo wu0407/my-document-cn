@@ -84,3 +84,6 @@ SALT.PILLAR.GIT_PILLAR								版本2015.8.3
 			为git_pillar (e.g. git_pillar_pubkey, git_pillar_privkey, git_pillar_passphrase, etc.).
 			salt.pillar.git_pillar.ext_pillar(minion_id, repo, pillar_dirs)
 				Checkout the ext_pillar sources and compile the resulting pillar SLS
+	相关连接
+		EXTERNAL PILLARS
+			https://docs.saltstack.com/en/latest/topics/development/external_pillars.html
