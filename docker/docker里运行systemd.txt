@@ -1,0 +1,48 @@
+在docker里面运行systemd
+	systemd需要条件:
+		systemd requires the CAP_SYS_ADMIN capability. This means running docker with --privileged or --caps-add SYS_ADMIN. Not good for a base image.
+		systemd requires access to the cgroups filesystem.
+		systemd has a number of unit files that don’t matter in a container, and they cause errors if they’re not removed
+		host require runing with systemd for init
+	以centos官方基础镜像，包含了centos镜像已经包含了systemd。
+		docker pull library/centos@sha256:8072bc7c66c3d5b633c3fddfc2bf12d5b4c2623f7004d9eed6aae70e0e99fbd7
+	使用以下的Dockerfile来进行制作镜像
+		FROM centos
+		ENV container docker
+		RUN (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+		rm -f /lib/systemd/system/multi-user.target.wants/*;\
+		rm -f /etc/systemd/system/*.wants/*;\
+		rm -f /lib/systemd/system/local-fs.target.wants/*; \
+		rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+		rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+		rm -f /lib/systemd/system/basic.target.wants/*;\
+		rm -f /lib/systemd/system/anaconda.target.wants/*;\
+		rm -f /lib/systemd/system/*{,/}systemd-update-utmp*.service
+		VOLUME ["/sys/fs/cgroup"]
+		CMD ["/usr/sbin/init"]
+		
+		Dockerfile解析
+			首先要让systemd意识到自己运行在容器里，它通过container环境变量来检测，所以设置container环境变量为docker。
+			然后删除不必要的systemd配置文件，由于我们只要运行systemd和journald。
+			再声明需要host主机目录挂载为/sys/fs/cgroup卷。
+			最后执行初始化命令。
+	使用这个命令制作镜像
+		docker build -t centos-systemd .
+	如何使用这个镜像，比如:
+		使用systemd启动httpd
+			编写Dockerfile
+				FROM centos-systemd
+				RUN yum -y install httpd; yum clean all; systemctl enable httpd.service
+				EXPOSE 80
+				CMD ["/usr/sbin/init"]
+			创建镜像
+				docker build -t centos-systemd-httpd .
+			运行这个镜像
+				docker run –-privileged -d -v /sys/fs/cgroup:/sys/fs/cgroup:ro -p 80:80 --name httpd centos-systemd-httpd
+			验证是否成功
+				curl http://localhost或docker exec -it httpd ps aux
+	由于container运行在privilege模式下，里面的进程拥有所有权限，这样会有安全隐患，不推荐这么用，同时这也违背了docker的最佳实践，一个容器只运行一个进程。
+	
+	参考文章:
+		docker中使用systemd  http://blog.csdn.net/feiskyer/article/details/40397147
+		Running systemd within a Docker Container http://developerblog.redhat.com/2014/05/05/running-systemd-within-docker-container/
