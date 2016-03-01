@@ -1,0 +1,131 @@
+利用yum创建centos7基础镜像
+
+创建自己使用的centos7基础镜像方法
+	1.利用官方的centos7镜像，进行自定义和精简。类似http://www.appcontainers.com/centos7
+	2.自己对系统进行自定义和精简后，进行打包制作镜像。
+本文主要讨论利用yum来自定义系统，再打包生成镜像。主要目的是让我更熟悉系统。
+主要借鉴了docker源代码的mkimage-yum.sh和centos官方镜像kickstart文件和fedora官方镜像kickstart文件。
+
+1.安装的基本软件:
+	必须装的软件
+		bash yum vim-minimal
+	自定义安装软件
+		iputils iproute(提供ping ip ss命令)，
+	其他软件包可以根据需要添加，比如tar，less，rootfiles
+	安装命令
+		yum  --installroot=/temp/dir --releasever=/ --setopt=tsflags=nodocs --setopt=group_package_types=mandatory --setopt=override_install_langs=en_US -y install bash yum vim-minimal less iputils iproute less
+	
+	命令解析
+		--installroot
+			chroot的目录，软件安装的目录
+		--releasever
+			设置yum配置文件和repo里的$releasever值
+		--setopt
+			设置临时配置项给yum
+		tsflags=nodocs
+			不安装软件的doc文件
+		override_install_langs=en_US
+			只安装en_US有关的locale
+2.卸载不需要的软件包
+	systemd iptables  libmnl libnetfilter_conntrack libnfnetlink kmod kmod-libs dracut
+	由于iproute包依赖iptables，需要强制删除iptables
+		rpm --root=/root/baseimage-lite -e --nodeps iptables
+	删除libnfnetlink
+		yum remove libnfnetlink
+	删除libmnl libnetfilter_conntrack	
+		yum remove libmnl
+	删除systemd
+		rm -rf /root/baseimage-lite/etc/yum/protected.d/systemd.conf
+		yum remove systemd
+		删除systemd会同时删除kmod kmod-libs dracut iproute
+	强制安装iproute
+		yumdownloader --downloadonly --downloaddir=. iputils
+		rpm --root=/root/baseimage-lite  -i  --nodeps --excludedocs ../iputils-20121221-7.el7.x86_64.rpm
+	删除chkconfig
+		rpm --root=/root/baseimage-lite  -e chkconfig --nodeps
+3.对locale进行精简
+	为了保险只保留en_US的locale设置和所有字符集，设置目录在/usr/share/i18n/locales
+		查看/usr/share/i18n/locale/en_US分析依赖:
+			en_US需要en_GB还需要iso14651_t1 
+			en_GB需要i18n translit_combining iso14651_t1 en_US
+			i18n需要translit_neutral iso14651_t1
+			translit_neutral需要translit_compat translit_circle translit_cjk_compat translit_font translit_fraction translit_narrow translit_small translit_wide
+			iso14651_t1需要iso14651_t1_common
+		保留/usr/share/i18n/locales目录下的这些文件
+			en_GB  i18n  iso14651_t1_common  translit_cjk_compat  translit_compat  translit_fraction  translit_neutral  translit_wide  en_US  iso14651_t1  translit_circle     translit_combining   translit_font  translit_narrow    translit_small
+		命令
+			for x in `ls /usr/share/i18n/locales/ | grep -P -v "^en_US$|^en_GB$|i18n|translit_(compat|circle|combining|cjk_compat|font|fraction|narrow|small|wide|neutral)|^iso14651_t1($|_common)"`; do rm -fr /usr/share/i18n/locales/$x;done
+	精简二进制的/usr/lib/locale/locale-archive文件
+		rm /root/baseimage-lite/usr/lib/locale/locale-archive
+		localedef --prefix=/root/baseimage --charmap=/root/baseimage/usr/share/i18n/charmaps --inputfile=/root/baseimage/usr/lib/locale:/root/baseimage/usr/share/i18n -v -c -i en_US -f UTF-8 en_US.UTF-8
+	删除软件包自带的locale文件，只保留en_US
+		for x in `ls /root/baseimage-lite/usr/share/locale | grep -v ^en_US$`;do rm -fr /usr/share/locale/$x; done
+
+4.删除/usr/share/目录下其他多余的文件
+	各个目录的信息
+		man
+			man文档存放地方
+		doc
+			文档存放地方
+		info
+			info文档存放地方
+		gnome
+			gnome图形界面相关东西，目前没有help目录
+		groff
+			包括tmac宏和font目录和eign(file for common words)
+			http://man7.org/linux/man-pages/man1/groff.1.html
+			https://www.gnu.org/software/groff/manual/html_node/Macro-Directories.html
+		licenses
+			各个软件的授权协议
+		cracklib
+			用来验证弱密码的库
+		awk
+			awk的范例
+		centos-release/redhat-release
+			授权协议
+		applications
+			只有一个defaults.list，应该是文件打开的默认程序,桌面环境使用
+		gnupg
+			GnuPG 2.0的帮助文件和配置样板
+		terminfo
+			可以删除你不要终端类型
+		aclocal
+			下面只有pkg.m4，它是pkgconfig包的组件，如果不要编译依赖relies on autoconf to build的代码就删除它
+		mime
+			This is the freedesktop.org shared MIME info database.好像是桌面才用这些mime信息
+	删除
+		rm -rf /root/baseimage-lite/usr/share/{man,doc,info,gnome/help,groff,licenses,awk,applications,gnupg,mime,aclocal,cracklib}/*
+
+5.设置默认时区和删除不需要的时区配置文件
+	rm -f /root/baseimage-lite/etc/localtime
+	cp /root/baseimage-lite/usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+	rm -rf /root/baseimage-lite/usr/share/zoneinfo/*
+
+6.设置yum
+	设置yum源
+		cp /etc/yum.repo.d/xxx.repo /root/baseimage-lite/etc/yum.repo.d
+	设置yum配置，不安装doc，只安装en_US的locale
+		sed -i '/distroverpkg=centos-release/a tsflags=nodocs\noverride_install_langs=en_US\ntsflags=nodocs' /etc/yum.conf
+
+7.删除不需要的体积大的二进制文件
+	rm -rf /root/baseimage-lite/{sbin/sln,bin/localedef,sbin/build-locale-archive}
+
+8.删除缓存和临时文件
+	rm -rf /root/baseimage-lite/etc/ld.so.cache
+	rm -rf /root/baseimage-lite/var/cache/ldconfig/*
+	yum --installroot=/root/baseimage-lite clean all
+	rm -rf /root/baseimage-lite/var/cache/yum/*
+	rm -rf /tmp/* /var/tmp/*
+9.生成镜像
+	tar --numeric-owner -c -C /root/baseimage-lite . | docker import - $name:$version
+	
+参考文档
+	https://github.com/CentOS/sig-cloud-instance-build/blob/master/docker/centos-7.ks
+	https://github.com/CentOS/sig-cloud-instance-build/blob/revert-12-master/docker/centos-7.ks
+	https://github.com/CentOS/sig-cloud-instance-build/blob/livemedia_builds/docker/centos-7.ks
+	https://git.fedorahosted.org/cgit/spin-kickstarts.git/tree/fedora-docker-base.ks
+	https://github.com/cloudrouter/cloudrouter/blob/master/kickstarts/common/docker-package-list
+	https://github.com/docker/docker/blob/master/contrib/mkimage-yum.sh
+	http://www.appcontainers.com/centos7
+	
+	
