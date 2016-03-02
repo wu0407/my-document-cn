@@ -1,0 +1,35 @@
+docker网络
+
+1.docker默认的bridge，启用network manage
+	下使用docker daemon --iptables=false时
+		当容器像外部通信时(非host主机ip)，采用forward包。container内部之间通信，不使用forward，两个虚拟网卡直接通信
+		容器与互联网通信必须路由器能够对container ip进行nat，或需要通信的目的主机有该ip的路由信息
+	使用默认或docker daemon --iptables=true
+		当容器像外部通信时(非host主机ip)，采用nat+forward。container内部之间通信，不使用forward，两个虚拟网卡直接通信
+2.docker使用host，启用network manage
+	在默认或--iptables=true和--iptables=false一样
+		ip使用主机的网卡和ip，与默认bridge通信通过网卡之间通信，使用docker0网桥和使用网桥ip到达虚拟网卡
+3.docker使用自定义bridge网络
+	在--iptables=false
+		与默认bridge的container或其他自定义的网络的container能通过ip进行通信，采用forward，使用原始ip进行通信。
+		容器与互联网通信必须路由器能够对container ip进行nat，或需要通信的目的主机有该ip的路由信息
+	在--iptables=true
+		不能与其他docker网络的container通信，使用iptables规则
+	默认bridge网络加入这个网络，/etc/resolv.conf自动变成dns服务器使用内部的127.0.0.11
+	disconnect掉原有网络，处在默认的bridge网络，/etc/resolv.conf文件还是"nameserver 127.0.0.11 options ndots:0"
+	container之间可以通过container名字来通信。dns服务器使用内部的127.0.0.11，定义在/etc/resolv.conf
+	一个container可以有多个网络，使用 docker network connect <network name> <container>,而且会增加这个网络的ip和网卡
+	使用docker run --net=<option network> --ip=172.25.3.3这个ip会在container reload继续保留
+	
+4.--link与--alias/--net-alias
+	--link针对一个container
+	--alias针对整个网络范围
+	
+docker网络总结
+	1.默认的bridge网络中容器，不能使用容器名来相互通信，必须在docker run时使用--link=CONTAINER-NAME:ALIAS name，目标容器必须已经存在且不能重启，使用别名来通信，或者通过ip来通信。且link的别名只在该网络里有用，link可以进行环境变量插入。
+	2.在用户创建的网络中，可以直接使用使用容器名来相互通信，也可在使用docker run或docker connect时使用 --link=CONTAINER-NAME:ALIAS name，使用别名来进行通信，但是这个目标容器可以是不存在的，也可以重启。
+	且link的别名只在该网络里有用，link不可以进行环境变量插入。
+	3.网络别名是针对某个个网络的，其他网络无法使用。可以在docker run --net-alias NET-ALIAS，或者docker network connect --alias NET-ALIAS指定网络别名，如果有不同的容器有相同的alias，则先设置该alias的容器将会被映射，只有在先映射容器无法连接或关闭时才会映射为后alias容器
+	
+
+	
