@@ -13,7 +13,7 @@
 		iputils iproute(提供ping ip ss命令)，
 	其他软件包可以根据需要添加，比如tar，less，rootfiles
 	安装命令
-		yum  --installroot=/temp/dir --releasever=/ --setopt=tsflags=nodocs --setopt=group_package_types=mandatory --setopt=override_install_langs=en_US -y install bash yum vim-minimal less iputils iproute less
+		yum  --installroot=/root/baseimage-lite --releasever=/ --setopt=tsflags=nodocs --setopt=group_package_types=mandatory --setopt=override_install_langs=en_US -y install bash yum vim-minimal less iputils iproute less
 	
 	命令解析
 		--installroot
@@ -27,13 +27,15 @@
 		override_install_langs=en_US
 			只安装en_US有关的locale
 2.卸载不需要的软件包
-	systemd iptables  libmnl libnetfilter_conntrack libnfnetlink kmod kmod-libs dracut
+	systemd iptables firewalled  libmnl libnetfilter_conntrack libnfnetlink kmod kmod-libs dracut
 	由于iproute包依赖iptables，需要强制删除iptables
 		rpm --root=/root/baseimage-lite -e --nodeps iptables
+	删除firewalled
+		yum --installroot=/root/baseimage-lite remove firewalled
 	删除libnfnetlink
-		yum remove libnfnetlink
+		yum --installroot=/root/baseimage-lite remove libnfnetlink 
 	删除libmnl libnetfilter_conntrack	
-		yum remove libmnl
+		yum --installroot=/root/baseimage-lite remove libmnl
 	删除systemd
 		rm -rf /root/baseimage-lite/etc/yum/protected.d/systemd.conf
 		yum remove systemd
