@@ -473,7 +473,7 @@ docker网络						(docker v1.10.2)
 		使用host网络
 			映射端口时，不使用docker-proxy，直接httpd打开端口
 		在打开userland-proxy情况下，使用代理转发功能，不会用到iptables进行转换
-4.--link与--alias/--net-alias
+--link与--alias/--net-alias
 	--link针对一个container
 	--alias针对整个网络范围
 	
