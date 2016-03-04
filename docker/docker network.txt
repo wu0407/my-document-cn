@@ -1,31 +1,483 @@
-docker网络
+docker网络						(docker v1.10.2)
 
-1.docker默认的bridge，启用network manage
-	下使用docker daemon --iptables=false时
-		当容器像外部通信时(非host主机ip)，采用forward包。container内部之间通信，不使用forward，两个虚拟网卡直接通信
-		容器与互联网通信必须路由器能够对container ip进行nat，或需要通信的目的主机有该ip的路由信息
-	使用默认或docker daemon --iptables=true
-		当容器像外部通信时(非host主机ip)，采用nat+forward。container内部之间通信，不使用forward，两个虚拟网卡直接通信
-2.docker使用host，启用network manage
-	在默认或--iptables=true和--iptables=false一样
-		ip使用主机的网卡和ip，与默认bridge通信通过网卡之间通信，使用docker0网桥和使用网桥ip到达虚拟网卡
-3.docker使用自定义bridge网络
-	在--iptables=false
-		与默认bridge的container或其他自定义的网络的container能通过ip进行通信，采用forward，使用原始ip进行通信。
-		容器与互联网通信必须路由器能够对container ip进行nat，或需要通信的目的主机有该ip的路由信息
-	在--iptables=true
-		不能与其他docker网络的container通信，使用iptables规则
-	默认bridge网络加入这个网络，/etc/resolv.conf自动变成dns服务器使用内部的127.0.0.11
+1.docker通信--iptables
+	环境:daemon使用默认的--userland-proxy=true,-icc=true，启用network manage
+
+	docker daemon --iptables=false时
+		docker默认的bridge
+			当容器向外部通信时(非host主机ip)，采用forward包。container内部之间通信，不使用forward，两个虚拟网卡直接通信
+			容器与互联网通信必须路由器能够对container ip进行nat，或需要通信的目的主机有该ip的路由信息
+			
+		docker使用host
+			ip使用主机的网卡和ip，与默认bridge通信通过网卡之间通信，使用docker0网桥和使用网桥ip到达虚拟网卡
+
+		docker使用自定义bridge网络
+			与默认bridge的container或其他自定义的网络的container能通过ip进行通信，采用forward，使用原始ip进行通信。
+			容器与互联网通信必须路由器能够对container ip进行nat，或需要通信的目的主机有该ip的路由信息
+
+	docker daemon --iptables=true时
+		docker默认的bridge
+			当容器向外部通信时(非host主机ip)，采用nat+forward。container内部之间通信，不使用forward，两个虚拟网卡直接通信
+			与自定义bridge容器通信，使用iptables规则阻止与其他docker网络的container通信。
+
+		docker使用host
+			ip使用主机的网卡和ip，与默认bridge和自定义bridge的container通信通过网卡之间通信，使用网桥并使用网桥ip与容器虚拟网卡通信
+
+		docker使用自定义bridge网络
+			使用iptables规则阻止与其他docker网络的container通信，container内部之间通信，不使用forward，两个虚拟网卡直接通信
+
+	默认bridge网络加入自定义的bridge网络，/etc/resolv.conf自动变成dns服务器使用内部的127.0.0.11，并且多了个网卡，ip是新加入网络的ip。
 	disconnect掉原有网络，处在默认的bridge网络，/etc/resolv.conf文件还是"nameserver 127.0.0.11 options ndots:0"
 	container之间可以通过container名字来通信。dns服务器使用内部的127.0.0.11，定义在/etc/resolv.conf
 	一个container可以有多个网络，使用 docker network connect <network name> <container>,而且会增加这个网络的ip和网卡
 	使用docker run --net=<option network> --ip=172.25.3.3这个ip会在container reload继续保留
 	
+	container网络隔离和网络之间通信通过iptables来实现的，它默认只对两个网络之间进行隔离。与宿主机外部进行通信，通过MASQUERADE进行ip转换。
+		[root@centos7-node4 ~]# iptables -L -n -v
+		Chain INPUT (policy ACCEPT 114K packets, 78M bytes)
+		 pkts bytes target     prot opt in     out     source               destination         
+
+		Chain FORWARD (policy ACCEPT 0 packets, 0 bytes)
+		 pkts bytes target     prot opt in     out     source               destination         
+			4   336 DOCKER-ISOLATION  all  --  *      *       0.0.0.0/0            0.0.0.0/0           
+			2   168 DOCKER     all  --  *      docker0  0.0.0.0/0            0.0.0.0/0           
+			2   168 ACCEPT     all  --  *      docker0  0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+			2   168 ACCEPT     all  --  docker0 !docker0  0.0.0.0/0            0.0.0.0/0           
+			0     0 ACCEPT     all  --  docker0 docker0  0.0.0.0/0            0.0.0.0/0           
+			2   168 DOCKER     all  --  *      br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+			2   168 ACCEPT     all  --  *      br-064f9014c32c  0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+			2   168 ACCEPT     all  --  br-064f9014c32c !br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+			0     0 ACCEPT     all  --  br-064f9014c32c br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+
+		Chain OUTPUT (policy ACCEPT 97153 packets, 7122K bytes)
+		 pkts bytes target     prot opt in     out     source               destination         
+
+		Chain DOCKER (2 references)
+		 pkts bytes target     prot opt in     out     source               destination         
+
+		Chain DOCKER-ISOLATION (1 references)
+		 pkts bytes target     prot opt in     out     source               destination         
+			0     0 DROP       all  --  br-064f9014c32c docker0  0.0.0.0/0            0.0.0.0/0           
+			0     0 DROP       all  --  docker0 br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+			4   336 RETURN     all  --  *      *       0.0.0.0/0            0.0.0.0/0       
+
+		[root@centos7-node4 ~]# iptables -L -n -v -t nat
+		Chain PREROUTING (policy ACCEPT 2151 packets, 378K bytes)
+		 pkts bytes target     prot opt in     out     source               destination         
+			3   188 DOCKER     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
+
+		Chain INPUT (policy ACCEPT 1814 packets, 361K bytes)
+		 pkts bytes target     prot opt in     out     source               destination         
+
+		Chain OUTPUT (policy ACCEPT 59809 packets, 3673K bytes)
+		 pkts bytes target     prot opt in     out     source               destination         
+			4   336 DOCKER     all  --  *      *       0.0.0.0/0           !127.0.0.0/8          ADDRTYPE match dst-type LOCAL
+
+		Chain POSTROUTING (policy ACCEPT 59809 packets, 3673K bytes)
+		 pkts bytes target     prot opt in     out     source               destination         
+			1    84 MASQUERADE  all  --  *      !docker0  172.17.0.0/16        0.0.0.0/0           
+			1    84 MASQUERADE  all  --  *      !br-064f9014c32c  172.18.0.0/16        0.0.0.0/0           
+
+		Chain DOCKER (2 references)
+		 pkts bytes target     prot opt in     out     source               destination         
+			1    84 RETURN     all  --  docker0 *       0.0.0.0/0            0.0.0.0/0           
+			0     0 RETURN     all  --  br-064f9014c32c *       0.0.0.0/0            0.0.0.0/0 
+2.端口映射--userland-proxy
+	2.1在--userland-proxy=true和--iptables=true
+		使用docker默认bridge网络
+			映射端口时，使用的是docker-proxy在host上打开相应端口
+				root     24456  0.0  0.4 199476 17024 ?        Sl   14:29   0:00 docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 80 -container-ip 172.17.0.2 -container-port 80
+			
+			该容器对host主机的80端口进行访问，host主机网卡ip为10.10.50.99
+				[root@172.17.0.2 /]#	telnet 10.10.50.99 80
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn -vv tcp port 80 -i docker0 
+					tcpdump: listening on docker0, link-type EN10MB (Ethernet), capture size 65535 bytes
+					14:39:46.991782 IP (tos 0x10, ttl 64, id 16605, offset 0, flags [DF], proto TCP (6), length 60)
+						172.17.0.2.54648 > 10.10.50.99.80: Flags [S], cksum 0xe8ae (incorrect -> 0x3ebe), seq 2744393002, win 14600, options [mss 1460,sackOK,TS val 4080688631 ecr 0,nop,wscale 7], length 0
+					14:39:46.991809 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 60)
+						10.10.50.99.80 > 172.17.0.2.54648: Flags [S.], cksum 0xe8ae (incorrect -> 0x9d04), seq 2529278508, ack 2744393003, win 14480, options [mss 1460,sackOK,TS val 4080688631 ecr 4080688631,nop,wscale 7], length 0
+					14:39:46.991821 IP (tos 0x10, ttl 64, id 16606, offset 0, flags [DF], proto TCP (6), length 52)
+						172.17.0.2.54648 > 10.10.50.99.80: Flags [.], cksum 0xe8a6 (incorrect -> 0x03ee), seq 1, ack 1, win 115, options [nop,nop,TS val 4080688631 ecr 4080688631], length 0
+					14:39:46.991965 IP (tos 0x0, ttl 64, id 49769, offset 0, flags [DF], proto TCP (6), length 60)
+						172.17.0.1.36556 > 172.17.0.2.80: Flags [S], cksum 0x5854 (incorrect -> 0x6634), seq 3501236126, win 14600, options [mss 1460,sackOK,TS val 4080688631 ecr 0,nop,wscale 7], length 0
+					14:39:46.991984 IP (tos 0x0, ttl 64, id 0, offset 0, flags [DF], proto TCP (6), length 60)
+						172.17.0.2.80 > 172.17.0.1.36556: Flags [S.], cksum 0x5854 (incorrect -> 0x3504), seq 532070574, ack 3501236127, win 14480, options [mss 1460,sackOK,TS val 4080688631 ecr 4080688631,nop,wscale 7], length 0
+					14:39:46.991992 IP (tos 0x0, ttl 64, id 49770, offset 0, flags [DF], proto TCP (6), length 52)
+						172.17.0.1.36556 > 172.17.0.2.80: Flags [.], cksum 0x584c (incorrect -> 0x9bed), seq 1, ack 1, win 115, options [nop,nop,TS val 4080688631 ecr 4080688631], length 0
+					这三次握手，都类似http代理转发到后端
+			host主机访问0.0.0.0.80
+				[root@centos7-node4 ~]# telnet 0.0.0.0 80
+				Trying 0.0.0.0...
+				Connected to 0.0.0.0.
+				Escape character is '^]'.
+				sdsd
+				<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+				<html><head>
+				<title>501 Not Implemented</title>
+				</head><body>
+				<h1>Not Implemented</h1>
+				<p>sdsd to / not supported.<br />
+				</p>
+				</body></html>
+				Connection closed by foreign host.
+				
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn tcp port 80 -i lo
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on lo, link-type EN10MB (Ethernet), capture size 65535 bytes
+					11:03:48.118629 IP 127.0.0.1.49050 > 127.0.0.1.80: Flags [S], seq 2662872318, win 43690, options [mss 65495,sackOK,TS val 4154129757 ecr 0,nop,wscale 7], length 0
+					11:03:48.118644 IP 127.0.0.1.80 > 127.0.0.1.49050: Flags [S.], seq 1802007406, ack 2662872319, win 43690, options [mss 65495,sackOK,TS val 4154129757 ecr 4154129757,nop,wscale 7], length 0
+					11:03:48.118653 IP 127.0.0.1.49050 > 127.0.0.1.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4154129757 ecr 4154129757], length 0
+					
+					[root@centos7-node4 docker-systemd]# tcpdump -nn tcp port 80 -i docker0 
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on docker0, link-type EN10MB (Ethernet), capture size 65535 bytes
+					11:03:48.119688 IP 172.17.0.1.53107 > 172.17.0.2.80: Flags [S], seq 2481319301, win 14600, options [mss 1460,sackOK,TS val 4154129758 ecr 0,nop,wscale 7], length 0
+					11:03:48.119727 IP 172.17.0.2.80 > 172.17.0.1.53107: Flags [S.], seq 4178395327, ack 2481319302, win 14480, options [mss 1460,sackOK,TS val 4154129758 ecr 4154129758,nop,wscale 7], length 0
+					11:03:48.119742 IP 172.17.0.1.53107 > 172.17.0.2.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4154129758 ecr 4154129758], length 0
+					
+					[root@172.17.0.2 /]# tcpdump -nn tcp port 80 
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+					03:03:48.119698 IP 172.17.0.1.53107 > 172.17.0.2.80: Flags [S], seq 2481319301, win 14600, options [mss 1460,sackOK,TS val 4154129758 ecr 0,nop,wscale 7], length 0
+					03:03:48.119726 IP 172.17.0.2.80 > 172.17.0.1.53107: Flags [S.], seq 4178395327, ack 2481319302, win 14480, options [mss 1460,sackOK,TS val 4154129758 ecr 4154129758,nop,wscale 7], length 0
+					03:03:48.119752 IP 172.17.0.1.53107 > 172.17.0.2.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4154129758 ecr 4154129758], length 0
+					
+					这三次握手，都类似http代理转发到后端
+			在userland-proxy开启的条件下，监听端口使用docker-proxy进程，并不使用iptables转换，使用类似转发代理。
+		使用自定义bridge网络
+			映射端口时，使用的是docker-proxy在host上打开相应端口
+				root     24916  0.0  0.3 273208 14768 ?        Sl   14:59   0:00 docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 80 -container-ip 172.18.0.2 -container-port 80
+			该容器对host主机的80端口进行访问，host主机网卡ip为10.10.50.99
+				[root@172.18.0.2 /]#	telnet 10.10.50.99 80
+
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn  tcp port 80 -i br-064f9014c32c      
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on br-064f9014c32c, link-type EN10MB (Ethernet), capture size 65535 bytes
+					15:03:19.111329 IP 172.18.0.2.55720 > 10.10.50.99.80: Flags [S], seq 1729085664, win 14600, options [mss 1460,sackOK,TS val 4082100750 ecr 0,nop,wscale 7], length 0
+					15:03:19.111362 IP 10.10.50.99.80 > 172.18.0.2.55720: Flags [S.], seq 3430085728, ack 1729085665, win 14480, options [mss 1460,sackOK,TS val 4082100750 ecr 4082100750,nop,wscale 7], length 0
+					15:03:19.111377 IP 172.18.0.2.55720 > 10.10.50.99.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4082100750 ecr 4082100750], length 0
+					15:03:19.111836 IP 172.18.0.1.47887 > 172.18.0.2.80: Flags [S], seq 1716699767, win 14600, options [mss 1460,sackOK,TS val 4082100751 ecr 0,nop,wscale 7], length 0
+					15:03:19.111858 IP 172.18.0.2.80 > 172.18.0.1.47887: Flags [S.], seq 1846903183, ack 1716699768, win 14480, options [mss 1460,sackOK,TS val 4082100751 ecr 4082100751,nop,wscale 7], length 0
+					15:03:19.111869 IP 172.18.0.1.47887 > 172.18.0.2.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4082100751 ecr 4082100751], length 0
+				跟默认bridge一样
+		使用host网络
+			映射端口时，不使用docker-proxy，直接httpd打开端口
+				[root@centos7-node4 ~]# ss -tlp src :80      
+				State      Recv-Q Send-Q                                                      Local Address:Port                                                          Peer Address:Port   
+				LISTEN     0      128                                                                    :::http                                                                    :::*        users:(("httpd",25213,4),("httpd",25212,4),("httpd",25211,4),("httpd",25210,4),("httpd",25209,4),("httpd",25208,4))
+	2.2在--userland-proxy=false和--iptables=true
+		使用自定义bridge网络
+			映射端口时，使用docker daemon进程来监听80端口
+				[root@centos7-node4 ~]# ss -tlp src :80        
+				State      Recv-Q Send-Q                                                      Local Address:Port                                                          Peer Address:Port   
+				LISTEN     0      128                                                                    :::http                                                                    :::*        users:(("docker",25452,13))
+				[root@centos7-node4 ~]# ps aux | grep 25452
+				root     25452  0.9  0.8 588224 31504 ?        Ssl  15:26   0:02 /usr/bin/docker daemon --iptables=true --userland-proxy=false -H fd:// --registry-mirror=http://56fa04c3.m.daocloud.io
+			该容器对host主机的80端口进行访问，host主机网卡ip为10.10.50.99
+				[root@172.18.0.2 /]#	telnet 10.10.50.99 80
+	
+				抓包
+					[root@centos7-node4 ~] tcpdump -nn  tcp port 80 -i br-064f9014c32c 
+					15:35:33.727615 IP 172.18.0.2.56185 > 10.10.50.99.80: Flags [S], seq 2088379639, win 14600, options [mss 1460,sackOK,TS val 4084035366 ecr 0,nop,wscale 7], length 0
+					15:35:33.727649 IP 172.18.0.1.56185 > 172.18.0.2.80: Flags [S], seq 2088379639, win 14600, options [mss 1460,sackOK,TS val 4084035366 ecr 0,nop,wscale 7], length 0
+					15:35:33.727663 IP 172.18.0.2.80 > 172.18.0.1.56185: Flags [S.], seq 355228552, ack 2088379640, win 14480, options [mss 1460,sackOK,TS val 4084035366 ecr 4084035366,nop,wscale 7], length 0
+					15:35:33.727668 IP 10.10.50.99.80 > 172.18.0.2.56185: Flags [S.], seq 355228552, ack 2088379640, win 14480, options [mss 1460,sackOK,TS val 4084035366 ecr 4084035366,nop,wscale 7], length 0
+					15:35:33.727676 IP 172.18.0.2.56185 > 10.10.50.99.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4084035366 ecr 4084035366], length 0
+					15:35:33.727679 IP 172.18.0.1.56185 > 172.18.0.2.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4084035366 ecr 4084035366], length 0
+				查看内核local route开关
+					[root@centos7-node4 ~]# sysctl net.ipv4.conf.br-064f9014c32c.route_localnet
+					net.ipv4.conf.br-064f9014c32c.route_localnet = 1
+				查看iptables
+					[root@centos7-node4 ~]# iptables -nvL
+					Chain INPUT (policy ACCEPT 1116 packets, 93013 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+
+					Chain FORWARD (policy ACCEPT 0 packets, 0 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+					 8736 9630K DOCKER-ISOLATION  all  --  *      *       0.0.0.0/0            0.0.0.0/0           
+					 5757 9461K DOCKER     all  --  *      docker0  0.0.0.0/0            0.0.0.0/0           
+					 5757 9461K ACCEPT     all  --  *      docker0  0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+					 4200  236K ACCEPT     all  --  docker0 !docker0  0.0.0.0/0            0.0.0.0/0           
+						0     0 ACCEPT     all  --  docker0 docker0  0.0.0.0/0            0.0.0.0/0           
+					 9824   19M DOCKER     all  --  *      br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+					 9823   19M ACCEPT     all  --  *      br-064f9014c32c  0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+					 7312  430K ACCEPT     all  --  br-064f9014c32c !br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+						1    60 ACCEPT     all  --  br-064f9014c32c br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+
+					Chain OUTPUT (policy ACCEPT 878 packets, 110K bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+
+					Chain DOCKER (2 references)
+					 pkts bytes target     prot opt in     out     source               destination         
+						0     0 ACCEPT     tcp  --  !br-064f9014c32c br-064f9014c32c  0.0.0.0/0            172.18.0.2           tcp dpt:80
+
+					Chain DOCKER-ISOLATION (1 references)
+					 pkts bytes target     prot opt in     out     source               destination         
+						0     0 DROP       all  --  br-064f9014c32c docker0  0.0.0.0/0            0.0.0.0/0           
+						0     0 DROP       all  --  docker0 br-064f9014c32c  0.0.0.0/0            0.0.0.0/0           
+					 8736 9630K RETURN     all  --  *      *       0.0.0.0/0            0.0.0.0/0           
+					[root@centos7-node4 ~]# iptables -nvL -t nat
+					Chain PREROUTING (policy ACCEPT 47 packets, 4552 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+						2   112 DOCKER     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
+
+					Chain INPUT (policy ACCEPT 12 packets, 2468 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+
+					Chain OUTPUT (policy ACCEPT 451 packets, 27977 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+						0     0 DOCKER     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
+
+					Chain POSTROUTING (policy ACCEPT 451 packets, 27977 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+						0     0 MASQUERADE  all  --  *      docker0  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match src-type LOCAL
+						0     0 MASQUERADE  all  --  *      br-064f9014c32c  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match src-type LOCAL
+					   64  4005 MASQUERADE  all  --  *      !docker0  172.17.0.0/16        0.0.0.0/0           
+					   66  3984 MASQUERADE  all  --  *      !br-064f9014c32c  172.18.0.0/16        0.0.0.0/0           
+						1    60 MASQUERADE  tcp  --  *      *       172.18.0.2           172.18.0.2           tcp dpt:80
+
+					Chain DOCKER (2 references)
+					 pkts bytes target     prot opt in     out     source               destination         
+						1    60 DNAT       tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:80 to:172.18.0.2:80
+				分析包处理过程
+					源地址为172.18.0.2.56185，目标地址为10.10.50.99.80，入口为br-064f9014c32c，出口无
+					在nat表PREROUTING链里，匹配目标地址为本地ip，跳到DOCKER链，进行目标地址转换为172.18.0.2.80，
+					到了filter表FORWARD链里，匹配最后一条，入口为br-064f9014c32c，出口为br-064f9014c32c
+					到了nat表POSTROUTING里，匹配最后一条，源地址为172.18.0.2，目标地址为172.18.0.2端口80，进行源地址MASQUERADE
+					这时包为源地址为172.18.0.1.56185，目标地址172.18.0.2.80
+					httpd收到连接请求后，发送172.18.0.2.80 > 172.18.0.1.56185，入口为br-064f9014c32c，出口无
+					由于MASQUERADE，会将目标地址变成172.18.0.2.56185，由于DNAT，会将源地址转成10.10.50.99.80
+			host上访问0.0.0.0:80
+				[root@centos7-node4 ~]# telnet 0.0.0.0 80
+
+				抓包
+					16:59:51.148401 IP 172.18.0.1.34440 > 172.18.0.2.80: Flags [S], seq 1537360601, win 43690, options [mss 65495,sackOK,TS val 4089092787 ecr 0,nop,wscale 7], length 0
+					16:59:51.148424 IP 172.18.0.2.80 > 172.18.0.1.34440: Flags [S.], seq 1279630668, ack 1537360602, win 14480, options [mss 1460,sackOK,TS val 4089092787 ecr 4089092787,nop,wscale 7], length 0
+					16:59:51.148439 IP 172.18.0.1.34440 > 172.18.0.2.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4089092787 ecr 4089092787], length 0
+				分析包处理过程
+					默认系统挑选了127.0.0.1作为源地址
+						[root@centos7-node4 docker-systemd]# ss -tn
+						State      Recv-Q Send-Q                                                        Local Address:Port                                                          Peer Address:Port 
+						ESTAB      0      0                                                                 127.0.0.1:34440					127.0.0.1:80 
+					源地址为127.0.0.1:34440，目标地址为127.0.0.1:80，入口为lo，出口为lo
+					在nat表OUTPUT链里，匹配目标地址为本地ip，跳到DOCKER链，进行目标地址转换为172.18.0.2.80，出口为br-064f9014c32c
+					由于打开了route_localnet，可以进行本地路由，可以进入到了nat表POSTROUTING里，
+					匹配第二条，源地址为本地地址，出口为br-064f9014c32c，进行源地址MASQUERADE
+					这时包为源地址为172.18.0.1.34440，目标地址为172.18.0.2.80
+					httpd收到连接请求后，发送172.18.0.2.80 > 172.18.0.1.34440
+					由于MASQUERADE，会将目标地址变成127.0.0.1.34440，由于DNAT，会将源地址转成127.0.0.1.80
+				为什么tcpdump抓不到127.0.0.1地址呢
+					tcpdump是看不见链的处理过程，因为它只在PREROUTING之前和POSTROUTING之后抓
+			关闭route_localnet，host上访问0.0.0.0:80
+				[root@centos7-node4 ~]# telnet 127.0.0.1 80
+				Trying 127.0.0.1...
+				连不上服务器
+				查看iptables
+					[root@centos7-node4 ~]# iptables -nvL -t nat
+					Chain PREROUTING (policy ACCEPT 0 packets, 0 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+						0     0 DOCKER     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
+
+					Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+
+					Chain OUTPUT (policy ACCEPT 3 packets, 180 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+						1    60 DOCKER     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ADDRTYPE match dst-type LOCAL
+
+					Chain POSTROUTING (policy ACCEPT 3 packets, 180 bytes)
+					 pkts bytes target     prot opt in     out     source               destination         
+						0     0 MASQUERADE  all  --  *      docker0  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match src-type LOCAL
+						0     0 MASQUERADE  all  --  *      br-064f9014c32c  0.0.0.0/0            0.0.0.0/0            ADDRTYPE match src-type LOCAL
+						0     0 MASQUERADE  all  --  *      !docker0  172.17.0.0/16        0.0.0.0/0           
+						0     0 MASQUERADE  all  --  *      !br-064f9014c32c  172.18.0.0/16        0.0.0.0/0           
+						0     0 MASQUERADE  tcp  --  *      *       172.18.0.2           172.18.0.2           tcp dpt:80
+
+					Chain DOCKER (2 references)
+					 pkts bytes target     prot opt in     out     source               destination         
+						1    60 DNAT       tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:80 to:172.18.0.2:80
+					发现OUTPUT有匹配到DOCKER链的包，但是POSTROUTING没有匹配到，包在这里就被丢弃了吧
+					在container里抓包，发现没有收到任何包
+			关闭route_localnet，host上访问10.10.50.99:80
+				[root@centos7-node4 ~]# telnet 10.10.50.99 80
+
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn  tcp port 80 -i br-064f9014c32c 
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on br-064f9014c32c, link-type EN10MB (Ethernet), capture size 65535 bytes
+					19:05:09.834311 IP 172.18.0.1.45268 > 172.18.0.2.80: Flags [S], seq 3854158907, win 43690, options [mss 65495,sackOK,TS val 4096611473 ecr 0,nop,wscale 7], length 0
+					19:05:09.834337 IP 172.18.0.2.80 > 172.18.0.1.45268: Flags [S.], seq 348810979, ack 3854158908, win 14480, options [mss 1460,sackOK,TS val 4096611473 ecr 4096611473,nop,wscale 7], length 0
+					19:05:09.834352 IP 172.18.0.1.45268 > 172.18.0.2.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4096611473 ecr 4096611473], length 0
+				分析包处理过程
+					与127.0.0.1.80是类似的，只是把127.0.0.1改成10.10.50.99
+			关闭route_localnet，host上访问172.18.0.1:80
+				[root@centos7-node4 ~]# telnet 172.18.0.1 80
+
+				抓包
+					19:13:44.606957 IP 172.18.0.1.55160 > 172.18.0.2.80: Flags [S], seq 367982200, win 43690, options [mss 65495,sackOK,TS val 4097126246 ecr 0,nop,wscale 7], length 0
+					19:13:44.606982 IP 172.18.0.2.80 > 172.18.0.1.55160: Flags [S.], seq 2890067388, ack 367982201, win 14480, options [mss 1460,sackOK,TS val 4097126246 ecr 4097126246,nop,wscale 7], length 0
+					19:13:44.606997 IP 172.18.0.1.55160 > 172.18.0.2.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4097126246 ecr 4097126246], length 0
+			
+			在不启用userland-proxy的情况下，使用iptables的MASQUERADE和内核的net.ipv4.route_localnet，使用内核的net.ipv4.route_localnet功能，h这样ost主机能够访问127.0.0.1地址，这样访问更快。
+		使用默认的bridge网络
+			跟自定义bridg网络一样
+		使用host网络
+			映射端口时，不使用docker-proxy，直接httpd打开端口
+	2.3在--userland-proxy=false且--iptables=false
+		使用默认的bridge网络
+			映射端口时使用docker daemon来监听80端口
+				[root@centos7-node4 ~]# ss -tnlp src :80
+				State      Recv-Q Send-Q                                                        Local Address:Port                                                          Peer Address:Port 
+				LISTEN     3      128                                                                      :::80                                                                      :::*      users:(("docker",32266,13))
+				[root@centos7-node4 ~]# ps aux | grep 32266
+				root     32266  0.0  0.6 588480 26528 ?        Ssl  09:28   0:00 /usr/bin/docker daemon --iptables=false --userland-proxy=false -H fd:// --registry-mirror=http://56fa04c3.m.daocloud.io
+			host上访问10.10.50.99.80
+				[root@centos7-node4 ~]# telnet 10.10.50.99 80
+				Trying 10.10.50.99...
+				Connected to 10.10.50.99.
+				Escape character is '^]'.
+				输入任何东西没有http返回
+				
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn  tcp port 80 -i lo      
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on lo, link-type EN10MB (Ethernet), capture size 65535 bytes
+					09:33:38.747249 IP 10.10.50.99.56865 > 10.10.50.99.80: Flags [S], seq 2310997081, win 43690, options [mss 65495,sackOK,TS val 4148720386 ecr 0,nop,wscale 7], length 0
+					09:33:38.747263 IP 10.10.50.99.80 > 10.10.50.99.56865: Flags [S.], seq 4063529214, ack 2310997082, win 43690, options [mss 65495,sackOK,TS val 4148720386 ecr 4148720386,nop,wscale 7], length 0
+					09:33:38.747271 IP 10.10.50.99.56865 > 10.10.50.99.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4148720386 ecr 4148720386], length 0
+					在container里抓包并没有抓到任何包
+			host上访问0.0.0.0.80
+				[root@centos7-node4 ~]# telnet 0.0.0.0 80    
+				Trying 0.0.0.0...
+				Connected to 0.0.0.0.
+				Escape character is '^]'.
+				输入任何东西没有http返回
+				
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn  tcp port 80 -i lo 
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on lo, link-type EN10MB (Ethernet), capture size 65535 bytes
+					10:08:02.212155 IP 127.0.0.1.48190 > 127.0.0.1.80: Flags [S], seq 172051631, win 43690, options [mss 65495,sackOK,TS val 4150783851 ecr 0,nop,wscale 7], length 0
+					10:08:02.212168 IP 127.0.0.1.80 > 127.0.0.1.48190: Flags [S.], seq 3976968339, ack 172051632, win 43690, options [mss 65495,sackOK,TS val 4150783851 ecr 4150783851,nop,wscale 7], length 0
+					10:08:02.212177 IP 127.0.0.1.48190 > 127.0.0.1.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4150783851 ecr 4150783851], length 0
+					在container里抓包并没有抓到任何包
+			host上访问172.17.0.1.80
+				[root@centos7-node4 ~]# telnet 172.17.0.1 80    
+				Trying 172.17.0.1...
+				Connected to 0.0.0.0.
+				Escape character is '^]'.
+				输入任何东西没有http返回
+				
+				抓包
+					10:16:18.038901 IP 172.17.0.1.50445 > 172.17.0.1.80: Flags [S], seq 3724410287, win 43690, options [mss 65495,sackOK,TS val 4151279678 ecr 0,nop,wscale 7], length 0
+					10:16:18.038913 IP 172.17.0.1.80 > 172.17.0.1.50445: Flags [S.], seq 1743493053, ack 3724410288, win 43690, options [mss 65495,sackOK,TS val 4151279678 ecr 4151279678,nop,wscale 7], length 0
+					10:16:18.038921 IP 172.17.0.1.50445 > 172.17.0.1.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4151279678 ecr 4151279678], length 0
+					在container里抓包并没有抓到任何包
+			在container里访问10.10.50.99 80
+				[root@172.17.0.2 /]# telnet 10.10.50.99 80
+				Trying 10.10.50.99...
+				Connected to 10.10.50.99.
+				输入任何东西没有http返回
+				
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn  tcp port 80 -i docker0
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on docker0, link-type EN10MB (Ethernet), capture size 65535 bytes
+					10:24:09.461347 IP 172.17.0.2.42358 > 10.10.50.99.80: Flags [S], seq 3402101965, win 14600, options [mss 1460,sackOK,TS val 4151751100 ecr 0,nop,wscale 7], length 0
+					10:24:09.461381 IP 10.10.50.99.80 > 172.17.0.2.42358: Flags [S.], seq 174819382, ack 3402101966, win 14480, options [mss 1460,sackOK,TS val 4151751100 ecr 4151751100,nop,wscale 7], length 0
+					10:24:09.461395 IP 172.17.0.2.42358 > 10.10.50.99.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4151751100 ecr 4151751100], length 0
+			在container里访问172.17.0.1.80
+				[root@172.17.0.2 /]# telnet 172.17.0.1 80
+				Trying 172.17.0.1...
+				Connected to 172.17.0.1.
+				输入任何东西没有http返回
+				
+				抓包
+					10:28:52.083919 IP 172.17.0.2.45887 > 172.17.0.1.80: Flags [S], seq 4122120594, win 14600, options [mss 1460,sackOK,TS val 4152033723 ecr 0,nop,wscale 7], length 0
+					10:28:52.083945 IP 172.17.0.1.80 > 172.17.0.2.45887: Flags [S.], seq 3423135760, ack 4122120595, win 14480, options [mss 1460,sackOK,TS val 4152033723 ecr 4152033723,nop,wscale 7], length 0
+					10:28:52.083957 IP 172.17.0.2.45887 > 172.17.0.1.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4152033723 ecr 4152033723], length 0
+			在不启用userland-proxy和iptables的情况下，只是docker daemon监听映射端口，并不会转发请求到后端服务，只是做单纯的回应。
+		使用自定义bridge网络
+			跟默认的bridge一样
+		使用host网络
+			映射端口时，不使用docker-proxy，直接httpd打开端口
+	2.4--userland-proxy=true和--iptables=false
+		使用默认的bridge网络
+			使用docker-proxy来监听映射端口
+				[root@centos7-node4 ~]# ss -tlnp src :80
+				State      Recv-Q Send-Q                                                        Local Address:Port                                                          Peer Address:Port 
+				LISTEN     0      128                                                                      :::80                                                                      :::*      users:(("exe",1331,7))
+				[root@centos7-node4 ~]# ps aux | grep 1331
+				root      1331  0.0  0.4 273464 17216 ?        Sl   11:19   0:00 docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 80 -container-ip 172.17.0.2 -container-port 80
+			在container里访问10.10.50.99
+				[root@213990bb21eb /]# telnet 10.10.50.99 80
+				Trying 10.10.50.99...
+				Connected to 10.10.50.99.
+				Escape character is '^]'.
+				sds
+				<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+				<html><head>
+				<title>501 Not Implemented</title>
+				</head><body>
+				<h1>Not Implemented</h1>
+				<p>sds to / not supported.<br />
+				</p>
+				</body></html>
+				Connection closed by foreign host.
+				
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn tcp port 80 -i docker0 
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on docker0, link-type EN10MB (Ethernet), capture size 65535 bytes
+					11:28:27.991038 IP 172.17.0.2.43333 > 10.10.50.99.80: Flags [S], seq 3846395537, win 14600, options [mss 1460,sackOK,TS val 4155609630 ecr 0,nop,wscale 7], length 0
+					11:28:27.991072 IP 10.10.50.99.80 > 172.17.0.2.43333: Flags [S.], seq 608046162, ack 3846395538, win 14480, options [mss 1460,sackOK,TS val 4155609630 ecr 4155609630,nop,wscale 7], length 0
+					11:28:27.991088 IP 172.17.0.2.43333 > 10.10.50.99.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4155609630 ecr 4155609630], length 0
+					11:28:27.991230 IP 172.17.0.1.53474 > 172.17.0.2.80: Flags [S], seq 3899877328, win 14600, options [mss 1460,sackOK,TS val 4155609630 ecr 0,nop,wscale 7], length 0
+					11:28:27.991251 IP 172.17.0.2.80 > 172.17.0.1.53474: Flags [S.], seq 2957665127, ack 3899877329, win 14480, options [mss 1460,sackOK,TS val 4155609630 ecr 4155609630,nop,wscale 7], length 0
+					11:28:27.991263 IP 172.17.0.1.53474 > 172.17.0.2.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4155609630 ecr 4155609630], length 0
+					类似http代理转发到后端
+			在host里访问0.0.0.0.80
+				[root@centos7-node4 ~]# telnet 0.0.0.0 80
+				Trying 0.0.0.0...
+				Connected to 0.0.0.0.
+				Escape character is '^]'.
+				
+				抓包
+					[root@centos7-node4 ~]# tcpdump -nn tcp port 80 -i docker0 
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on docker0, link-type EN10MB (Ethernet), capture size 65535 bytes
+					11:39:16.940875 IP 172.17.0.1.53617 > 172.17.0.2.80: Flags [S], seq 431698879, win 14600, options [mss 1460,sackOK,TS val 4156258580 ecr 0,nop,wscale 7], length 0
+					11:39:16.940904 IP 172.17.0.2.80 > 172.17.0.1.53617: Flags [S.], seq 18191821, ack 431698880, win 14480, options [mss 1460,sackOK,TS val 4156258580 ecr 4156258580,nop,wscale 7], length 0
+					11:39:16.940917 IP 172.17.0.1.53617 > 172.17.0.2.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4156258580 ecr 4156258580], length 0
+					
+					[root@centos7-node4 docker-systemd]# tcpdump -nn tcp port 80 -i lo
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on lo, link-type EN10MB (Ethernet), capture size 65535 bytes
+					11:39:16.940682 IP 127.0.0.1.49560 > 127.0.0.1.80: Flags [S], seq 3969805310, win 43690, options [mss 65495,sackOK,TS val 4156258579 ecr 0,nop,wscale 7], length 0
+					11:39:16.940695 IP 127.0.0.1.80 > 127.0.0.1.49560: Flags [S.], seq 277488797, ack 3969805311, win 43690, options [mss 65495,sackOK,TS val 4156258579 ecr 4156258579,nop,wscale 7], length 0
+					11:39:16.940704 IP 127.0.0.1.49560 > 127.0.0.1.80: Flags [.], ack 1, win 342, options [nop,nop,TS val 4156258579 ecr 4156258579], length 0
+					
+					[root@172.17.0.2 /]# tcpdump -nn tcp port 80
+					tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+					listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes
+					03:39:16.940884 IP 172.17.0.1.53617 > 172.17.0.2.80: Flags [S], seq 431698879, win 14600, options [mss 1460,sackOK,TS val 4156258580 ecr 0,nop,wscale 7], length 0
+					03:39:16.940903 IP 172.17.0.2.80 > 172.17.0.1.53617: Flags [S.], seq 18191821, ack 431698880, win 14480, options [mss 1460,sackOK,TS val 4156258580 ecr 4156258580,nop,wscale 7], length 0
+					03:39:16.940918 IP 172.17.0.1.53617 > 172.17.0.2.80: Flags [.], ack 1, win 115, options [nop,nop,TS val 4156258580 ecr 4156258580], length 0
+					
+					类似http代理转发到后端
+		使用自定义bridge网络
+			与默认的bridge一样
+		使用host网络
+			映射端口时，不使用docker-proxy，直接httpd打开端口
+		在打开userland-proxy情况下，使用代理转发功能，不会用到iptables进行转换
 4.--link与--alias/--net-alias
 	--link针对一个container
 	--alias针对整个网络范围
 	
-docker网络总结
+其他特点
 	1.默认的bridge网络中容器，不能使用容器名来相互通信，必须在docker run时使用--link=CONTAINER-NAME:ALIAS name，目标容器必须已经存在且不能重启，使用别名来通信，或者通过ip来通信。且link的别名只在该网络里有用，link可以进行环境变量插入。
 	2.在用户创建的网络中，可以直接使用使用容器名来相互通信，也可在使用docker run或docker connect时使用 --link=CONTAINER-NAME:ALIAS name，使用别名来进行通信，但是这个目标容器可以是不存在的，也可以重启。
 	且link的别名只在该网络里有用，link不可以进行环境变量插入。
