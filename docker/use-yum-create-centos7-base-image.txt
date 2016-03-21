@@ -100,7 +100,7 @@
 
 5.设置默认时区和删除不需要的时区配置文件
 	rm -f /root/baseimage-lite/etc/localtime
-	cp /root/baseimage-lite/usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+	cp /root/baseimage-lite/usr/share/zoneinfo/Asia/Shanghai /root/baseimage-lite/etc/localtime
 	rm -rf /root/baseimage-lite/usr/share/zoneinfo/*
 
 6.设置yum
@@ -117,7 +117,8 @@
 	rm -rf /root/baseimage-lite/var/cache/ldconfig/*
 	yum --installroot=/root/baseimage-lite clean all
 	rm -rf /root/baseimage-lite/var/cache/yum/*
-	rm -rf /tmp/* /var/tmp/*
+	rm -rf /root/baseimage-lite/tmp/* /root/baseimage-lite/var/tmp/*
+	rm -rf /root/baseimage-lite/root/.bash_history
 9.生成镜像
 	tar --numeric-owner -c -C /root/baseimage-lite . | docker import - $name:$version
 	
